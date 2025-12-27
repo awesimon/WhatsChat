@@ -1,0 +1,9 @@
+{
+  "name": "Gemini Ultra Chat & Knowledge Hub",
+  "description": "A world-class AI assistant featuring web search, Google Maps grounding, document analysis with page-level citations, voice-to-text, and real-time reasoning visualization.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

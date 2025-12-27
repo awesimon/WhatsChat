@@ -4,51 +4,69 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gemini Ultra Chat</title>
+  <title>Gemini Light - AI Assistant</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
     
     :root {
-      --bg-deep: #050505;
-      --bg-surface: #111111;
-      --accent-primary: #8b5cf6;
-      --accent-secondary: #c084fc;
+      --bg-main: #ffffff;
+      --bg-sidebar: #f0f4f8;
+      --accent-blue: #1a73e8;
+      --text-main: #1f1f1f;
+      --text-muted: #5f6368;
+      --border-color: #dee2e6;
     }
 
     body { 
       font-family: 'Plus Jakarta Sans', sans-serif; 
-      background-color: var(--bg-deep); 
-      color: #e2e8f0; 
+      background-color: var(--bg-main); 
+      color: var(--text-main); 
       overflow: hidden;
     }
 
-    .glass-header {
-      background: rgba(10, 10, 10, 0.8);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #bdbdbd; }
+
+    .input-box {
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+      transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+      border: 1px solid #f1f3f4;
     }
 
-    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--accent-primary); }
+    .input-box:focus-within {
+      box-shadow: 0 4px 6px rgba(32,33,36,0.28);
+      border-color: transparent;
+      outline: 2px solid var(--accent-blue);
+    }
 
-    .thought-block {
-      font-family: 'JetBrains Mono', monospace;
-      background: rgba(139, 92, 246, 0.03);
-      border-left: 2px solid var(--accent-primary);
+    .ai-response {
+      max-width: 85%;
     }
 
     .user-bubble {
-      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-      box-shadow: 0 4px 15px rgba(139, 92, 246, 0.2);
+      background-color: #f0f4f9;
+      border-radius: 24px;
+      padding: 12px 24px;
+      max-width: 80%;
     }
 
-    .ai-bubble {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+    .thought-pill {
+      background: #f1f3f4;
+      border-left: 3px solid #1a73e8;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .toggle-pill {
+      transition: all 0.2s;
+    }
+    .toggle-pill.active {
+      background-color: #e8f0fe;
+      color: #1a73e8;
+      border-color: #1a73e8;
     }
   </style>
 <script type="importmap">

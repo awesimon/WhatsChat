@@ -1,43 +1,46 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ChatSession, ChatMessage, Role, FileMetadata } from './types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ChatSession, ChatMessage, Role, FileMetadata, KnowledgeBase } from './types';
 import { storageService } from './services/storage';
 import { GeminiService } from './services/gemini';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
+import KBManager from './components/KBManager';
 
-// Instantiate once; the service now creates the GoogleGenAI instance per-request
 const geminiService = new GeminiService();
 
 const App: React.FC = () => {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isKBOpen, setIsKBOpen] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
 
   useEffect(() => {
-    const saved = storageService.getSessions();
-    if (saved.length > 0) {
-      setSessions(saved);
-      setCurrentSessionId(saved[0].id);
+    const savedSessions = storageService.getSessions();
+    const savedKB = localStorage.getItem('gemini_knowledge_bases');
+    if (savedSessions.length > 0) {
+      setSessions(savedSessions);
+      setCurrentSessionId(savedSessions[0].id);
     } else {
       createNewSession();
     }
+    if (savedKB) setKnowledgeBases(JSON.parse(savedKB));
   }, []);
 
   useEffect(() => {
-    if (sessions.length > 0) {
-      storageService.saveSessions(sessions);
-    }
-  }, [sessions]);
+    storageService.saveSessions(sessions);
+    localStorage.setItem('gemini_knowledge_bases', JSON.stringify(knowledgeBases));
+  }, [sessions, knowledgeBases]);
 
   const createNewSession = () => {
     const newSession: ChatSession = {
       id: crypto.randomUUID(),
-      title: 'New Conversation',
+      title: 'New chat',
       messages: [],
       lastUpdated: Date.now(),
-      knowledgeBase: []
+      settings: { useReasoning: false, useWebSearch: true, useMaps: false }
     };
     setSessions(prev => [newSession, ...prev]);
     setCurrentSessionId(newSession.id);
@@ -45,7 +48,7 @@ const App: React.FC = () => {
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
-  const sendMessage = useCallback(async (text: string, attachments: FileMetadata[]) => {
+  const sendMessage = useCallback(async (text: string, attachments: FileMetadata[], settings: any) => {
     if (!currentSessionId) return;
 
     const userMessage: ChatMessage = {
@@ -56,175 +59,79 @@ const App: React.FC = () => {
       attachments
     };
 
-    setSessions(prev => prev.map(s => {
-      if (s.id === currentSessionId) {
-        return {
-          ...s,
-          messages: [...s.messages, userMessage],
-          lastUpdated: Date.now(),
-          title: s.messages.length === 0 ? text.substring(0, 30) + (text.length > 30 ? '...' : '') : s.title
-        };
-      }
-      return s;
-    }));
-
+    setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, messages: [...s.messages, userMessage], title: s.messages.length === 0 ? text.slice(0, 30) : s.title } : s));
     setIsTyping(true);
 
     const assistantId = crypto.randomUUID();
-    const assistantMessage: ChatMessage = {
-      id: assistantId,
-      role: Role.ASSISTANT,
-      content: '',
-      thought: '',
-      timestamp: Date.now(),
-      toolInvocations: []
-    };
-
-    setSessions(prev => prev.map(s => {
-      if (s.id === currentSessionId) {
-        return { ...s, messages: [...s.messages, assistantMessage] };
-      }
-      return s;
-    }));
+    const assistantMessage: ChatMessage = { id: assistantId, role: Role.ASSISTANT, content: '', thought: '', timestamp: Date.now() };
+    setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, messages: [...s.messages, assistantMessage] } : s));
 
     try {
-      const updatedSession = sessions.find(s => s.id === currentSessionId)!;
-      // Use the full message objects for mapping in geminiService
-      const history = [...updatedSession.messages, userMessage];
-      const kb = updatedSession.knowledgeBase;
-
+      const activeKB = knowledgeBases.find(kb => kb.id === currentSession?.activeKBId);
+      const kbFiles = activeKB ? activeKB.files : [];
+      
       await geminiService.generateStream(
-        history,
-        kb,
+        { ...currentSession!, messages: [...currentSession!.messages, userMessage], settings },
+        kbFiles,
         (text, thought, sources) => {
-          setSessions(prev => prev.map(s => {
-            if (s.id === currentSessionId) {
-              return {
-                ...s,
-                messages: s.messages.map(m => {
-                  if (m.id === assistantId) {
-                    return {
-                      ...m,
-                      content: text,
-                      thought: thought,
-                      groundingSources: sources?.map((src: any) => ({
-                        title: src.web?.title || src.maps?.title || 'Source',
-                        uri: src.web?.uri || src.maps?.uri || '#'
-                      }))
-                    };
-                  }
-                  return m;
-                })
-              };
-            }
-            return s;
-          }));
+          setSessions(prev => prev.map(s => s.id === currentSessionId ? {
+            ...s,
+            messages: s.messages.map(m => m.id === assistantId ? {
+              ...m,
+              content: text,
+              thought: thought,
+              groundingSources: sources?.map((src: any) => ({
+                title: src.web?.title || src.maps?.title || 'Source',
+                uri: src.web?.uri || src.maps?.uri || '#'
+              }))
+            } : m)
+          } : s));
         },
         (tool, args) => {
-          setSessions(prev => prev.map(s => {
-            if (s.id === currentSessionId) {
-              return {
-                ...s,
-                messages: s.messages.map(m => {
-                  if (m.id === assistantId) {
-                    const toolInvs = m.toolInvocations || [];
-                    return {
-                      ...m,
-                      toolInvocations: [...toolInvs, { name: tool, args }]
-                    };
-                  }
-                  return m;
-                })
-              };
-            }
-            return s;
-          }));
+          setSessions(prev => prev.map(s => s.id === currentSessionId ? {
+            ...s,
+            messages: s.messages.map(m => m.id === assistantId ? {
+              ...m, toolInvocations: [...(m.toolInvocations || []), { name: tool, args }]
+            } : m)
+          } : s));
         }
       );
-    } catch (error: any) {
-      console.error("Chat generation failed:", error);
-      // Update assistant message with error information
-      setSessions(prev => prev.map(s => {
-        if (s.id === currentSessionId) {
-          return {
-            ...s,
-            messages: s.messages.map(m => {
-              if (m.id === assistantId) {
-                return {
-                  ...m,
-                  content: `Error: ${error.message || "An unexpected error occurred while communicating with the AI."}. Please try again.`
-                };
-              }
-              return m;
-            })
-          };
-        }
-        return s;
-      }));
-    } finally {
-      setIsTyping(false);
-    }
-  }, [currentSessionId, sessions]);
-
-  const addToKnowledgeBase = (files: FileMetadata[]) => {
-    setSessions(prev => prev.map(s => {
-      if (s.id === currentSessionId) {
-        return { ...s, knowledgeBase: [...s.knowledgeBase, ...files] };
-      }
-      return s;
-    }));
-  };
-
-  const deleteSession = (id: string) => {
-    setSessions(prev => {
-      const filtered = prev.filter(s => s.id !== id);
-      if (filtered.length === 0) {
-        const newSession: ChatSession = {
-          id: crypto.randomUUID(),
-          title: 'New Conversation',
-          messages: [],
-          lastUpdated: Date.now(),
-          knowledgeBase: []
-        };
-        return [newSession];
-      }
-      return filtered;
-    });
-    if (currentSessionId === id) {
-      const remaining = sessions.filter(s => s.id !== id);
-      setCurrentSessionId(remaining.length > 0 ? remaining[0].id : null);
-    }
-  };
+    } catch (e: any) {
+      console.error(e);
+    } finally { setIsTyping(false); }
+  }, [currentSessionId, knowledgeBases, currentSession]);
 
   return (
-    <div className="flex h-screen bg-slate-900 text-slate-100 overflow-hidden">
+    <div className="flex h-screen bg-white text-gray-900 overflow-hidden">
       <Sidebar 
-        sessions={sessions}
-        currentId={currentSessionId}
-        onSelect={setCurrentSessionId}
-        onNew={createNewSession}
-        onDelete={deleteSession}
-        isOpen={isSidebarOpen}
-        toggle={() => setIsSidebarOpen(!isSidebarOpen)}
+        sessions={sessions} currentId={currentSessionId} onSelect={setCurrentSessionId}
+        onNew={createNewSession} onDelete={(id) => setSessions(prev => prev.filter(s => s.id !== id))}
+        onOpenKB={() => setIsKBOpen(true)} isOpen={isSidebarOpen} toggle={() => setIsSidebarOpen(!isSidebarOpen)}
       />
       
-      <main className="flex-1 flex flex-col relative overflow-hidden">
+      <main className="flex-1 relative flex flex-col overflow-hidden">
         {currentSession ? (
           <ChatInterface 
             session={currentSession}
+            knowledgeBases={knowledgeBases}
             onSendMessage={sendMessage}
-            onAddToKB={addToKnowledgeBase}
+            onUpdateSettings={(settings) => setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, ...settings, settings } : s))}
             isTyping={isTyping}
           />
         ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center animate-pulse">
-              <i className="fas fa-robot text-6xl text-blue-500 mb-4"></i>
-              <p className="text-xl text-slate-400">Select or start a new conversation</p>
-            </div>
-          </div>
+          <div className="flex-1 flex items-center justify-center text-gray-400">Select or start a new chat</div>
         )}
       </main>
+
+      {isKBOpen && (
+        <KBManager 
+          knowledgeBases={knowledgeBases}
+          onAddKB={(name) => setKnowledgeBases(prev => [...prev, { id: crypto.randomUUID(), name, description: '', files: [], createdAt: Date.now() }])}
+          onDeleteKB={(id) => setKnowledgeBases(prev => prev.filter(kb => kb.id !== id))}
+          onUploadToFile={(id, files) => setKnowledgeBases(prev => prev.map(kb => kb.id === id ? { ...kb, files: [...kb.files, ...files] } : kb))}
+          onClose={() => setIsKBOpen(false)}
+        />
+      )}
     </div>
   );
 };

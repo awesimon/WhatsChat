@@ -10,31 +10,29 @@ export interface FileMetadata {
   name: string;
   type: string;
   size: number;
-  data: string; // Base64 for binary
-  content?: string; // Extracted text for the model to read
-  pages?: number;
+  data: string; // Base64
+  content?: string; // Text
 }
 
-export interface MessagePart {
-  text?: string;
-  thought?: string;
-  toolCall?: {
-    name: string;
-    args: any;
-  };
-  image?: string;
+export interface KnowledgeBase {
+  id: string;
+  name: string;
+  description: string;
+  files: FileMetadata[];
+  createdAt: number;
 }
 
-export interface GroundingSource {
+export interface ChatSession {
+  id: string;
   title: string;
-  uri: string;
-}
-
-export interface Citation {
-  startIndex: number;
-  endIndex: number;
-  uri?: string;
-  sourceTitle?: string;
+  messages: ChatMessage[];
+  lastUpdated: number;
+  activeKBId?: string;
+  settings: {
+    useReasoning: boolean;
+    useWebSearch: boolean;
+    useMaps: boolean;
+  };
 }
 
 export interface ChatMessage {
@@ -44,15 +42,6 @@ export interface ChatMessage {
   thought?: string;
   timestamp: number;
   attachments?: FileMetadata[];
-  toolInvocations?: { name: string; args: any; result?: any }[];
-  groundingSources?: GroundingSource[];
-  citations?: Citation[];
-}
-
-export interface ChatSession {
-  id: string;
-  title: string;
-  messages: ChatMessage[];
-  lastUpdated: number;
-  knowledgeBase: FileMetadata[];
+  toolInvocations?: { name: string; args: any }[];
+  groundingSources?: { title: string; uri: string }[];
 }

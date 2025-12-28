@@ -10,15 +10,15 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
     
     :root {
       --bg-main: #ffffff;
-      --bg-sidebar: #f0f4f8;
+      --bg-sidebar: #f7f9fc;
       --accent-blue: #1a73e8;
-      --text-main: #1f1f1f;
-      --text-muted: #5f6368;
-      --border-color: #dee2e6;
+      --text-main: #1c1e21;
+      --text-muted: #64748b;
+      --border-color: #f1f5f9;
     }
 
     body { 
@@ -26,99 +26,72 @@
       background-color: var(--bg-main); 
       color: var(--text-main); 
       overflow: hidden;
+      font-size: 16px;
     }
 
-    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar { width: 5px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 10px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #bdbdbd; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+
+    .sidebar-transition {
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
 
     .input-box {
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.12);
-      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-      border: 1px solid #f1f3f4;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.03), 0 8px 32px rgba(0,0,0,0.04);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      border: 1px solid #edf2f7;
+      background-color: #ffffff;
     }
 
     .input-box:focus-within {
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-      border-color: transparent;
-      outline: 2px solid var(--accent-blue);
-      transform: translateY(-2px);
+      box-shadow: 0 12px 48px rgba(0,0,0,0.08);
+      border-color: #e2e8f0;
     }
 
-    @keyframes slideUpFade {
-      from { opacity: 0; transform: translateY(12px); }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
     }
 
     .animate-message {
-      animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      animation: slideIn 0.4s ease-out forwards;
     }
 
-    .ai-response {
-      max-width: 90%;
-    }
-
-    /* Markdown Styling */
-    .prose { font-size: 15px; line-height: 1.6; }
-    .prose p { margin-bottom: 1rem; }
-    .prose h1, .prose h2, .prose h3 { font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.75rem; color: #111; }
-    .prose h1 { font-size: 1.5rem; }
-    .prose h2 { font-size: 1.25rem; }
-    .prose h3 { font-size: 1.1rem; }
-    .prose ul, .prose ol { margin-bottom: 1rem; padding-left: 1.5rem; }
-    .prose ul { list-style-type: disc; }
-    .prose ol { list-style-type: decimal; }
-    .prose li { margin-bottom: 0.25rem; }
-    .prose blockquote { border-left: 4px solid var(--accent-blue); padding-left: 1rem; color: #555; font-style: italic; margin-bottom: 1rem; }
-    .prose code { font-family: 'JetBrains Mono', monospace; background: #f1f3f4; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.9em; }
-    .prose pre { background: #f8f9fa; border: 1px solid #eee; border-radius: 12px; padding: 1rem; overflow-x: auto; margin-bottom: 1rem; }
-    .prose pre code { background: transparent; padding: 0; }
-    .prose table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
-    .prose th, .prose td { text-align: left; padding: 0.75rem; border-bottom: 1px solid #eee; }
-    .prose th { background: #f8f9fa; font-weight: 700; font-size: 0.8rem; text-transform: uppercase; color: #666; }
-
+    .prose { font-size: 16px; line-height: 1.75; color: #334155; }
+    .prose code { font-family: 'JetBrains Mono', monospace; background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 6px; font-size: 0.9em; }
+    .prose pre { background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 16px; padding: 1.5rem; margin: 1.5rem 0; }
+    
     .user-bubble {
-      background-color: #f0f4f9;
+      background-color: #f8fafc;
+      border: 1px solid #f1f5f9;
       border-radius: 24px;
-      padding: 12px 24px;
-      max-width: 80%;
-      white-space: pre-wrap;
-      transition: transform 0.2s ease;
+      padding: 1rem 1.5rem;
+      max-width: 85%;
+      font-size: 16px;
     }
 
-    .thought-pill {
-      background: #f1f3f4;
-      border-left: 3px solid #1a73e8;
-      font-family: 'JetBrains Mono', monospace;
-      transition: all 0.3s ease;
+    .active-session {
+      background: #ffffff;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+      border-left: 3px solid var(--accent-blue);
     }
 
     .toggle-pill {
-      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    .toggle-pill:hover {
-      transform: translateY(-1px);
-    }
-    .toggle-pill.active {
-      background-color: #e8f0fe;
-      color: #1a73e8;
-      border-color: #1a73e8;
-      box-shadow: 0 2px 8px rgba(26, 115, 232, 0.15);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      transition: all 0.2s;
     }
 
-    /* Expanding animation for reasoning */
-    .expand-grid {
-      display: grid;
-      grid-template-rows: 0fr;
-      transition: grid-template-rows 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    .glass-footer {
+      background: rgba(247, 249, 252, 0.85);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid rgba(0,0,0,0.03);
     }
-    .expand-grid.expanded {
-      grid-template-rows: 1fr;
-    }
-    .expand-content {
-      overflow: hidden;
-    }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
   </style>
 <script type="importmap">
 {

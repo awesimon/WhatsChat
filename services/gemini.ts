@@ -34,12 +34,13 @@ export class GeminiService {
     // Config based on session settings
     const { useReasoning, useWebSearch, useMaps } = session.settings;
     
+    // Use Gemini 3 Pro for Reasoning as it handles thinkingBudget best
     let modelName = useReasoning ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
     const tools: any[] = [];
 
     if (useWebSearch) tools.push({ googleSearch: {} });
     if (useMaps) {
-      modelName = 'gemini-2.5-flash'; // Required for maps
+      modelName = 'gemini-2.5-flash'; 
       tools.push({ googleMaps: {} });
     }
 
@@ -70,6 +71,7 @@ export class GeminiService {
     currentTurnParts.push({ text: userContent });
     contents.push({ role: 'user', parts: currentTurnParts });
 
+    // CRITICAL: thinkingBudget enables reasoning visualization
     const config: any = {
       thinkingConfig: { thinkingBudget: useReasoning ? 32000 : 0 },
       tools: tools.length > 0 ? tools : undefined,
@@ -85,20 +87,32 @@ export class GeminiService {
     try {
       const responseStream = await ai.models.generateContentStream({ model: modelName, contents, config });
       let fullText = "", fullThought = "";
+      
       for await (const chunk of responseStream) {
         const c = chunk as GenerateContentResponse;
-        const thoughtPart = (c as any).candidates?.[0]?.content?.parts?.find((p: any) => p.thought);
-        if (thoughtPart) fullThought += thoughtPart.thought;
-        fullText += c.text || "";
-        const sources = c.candidates?.[0]?.groundingMetadata?.groundingChunks;
-        onChunk(fullText, fullThought, sources);
+        
+        // Extract thinking parts if present
         const parts = (c as any).candidates?.[0]?.content?.parts;
         if (parts) {
           for (const part of parts) {
-            if (part.functionCall && onToolCall) onToolCall(part.functionCall.name, part.functionCall.args);
+            if (part.thought) {
+              fullThought += part.thought;
+            }
+            if (part.text) {
+              fullText += part.text;
+            }
+            if (part.functionCall && onToolCall) {
+              onToolCall(part.functionCall.name, part.functionCall.args);
+            }
           }
         }
+
+        const sources = c.candidates?.[0]?.groundingMetadata?.groundingChunks;
+        onChunk(fullText, fullThought, sources);
       }
-    } catch (err: any) { throw err; }
+    } catch (err: any) { 
+      console.error("Gemini stream error", err);
+      throw err; 
+    }
   }
 }

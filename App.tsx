@@ -6,6 +6,7 @@ import { GeminiService } from './services/gemini';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import KBManager from './components/KBManager';
+import CitationSidebar from './components/CitationSidebar';
 
 const geminiService = new GeminiService();
 
@@ -17,8 +18,10 @@ const App: React.FC = () => {
   const [isKBOpen, setIsKBOpen] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isDbReady, setIsDbReady] = useState(false);
+  
+  // Citation Preview State
+  const [previewCitation, setPreviewCitation] = useState<{ title: string; uri: string } | null>(null);
 
-  // Load data on mount from SQLite
   useEffect(() => {
     const init = async () => {
       try {
@@ -32,13 +35,12 @@ const App: React.FC = () => {
           setSessions(savedSessions);
           setCurrentSessionId(savedSessions[0].id);
         } else {
-          // Trigger default session creation only after DB is ready
           const newSession: ChatSession = {
             id: crypto.randomUUID(),
-            title: 'New chat',
+            title: 'Hello there! 👋',
             messages: [],
             lastUpdated: Date.now(),
-            settings: { useReasoning: false, useWebSearch: true, useMaps: false }
+            settings: { useReasoning: true, useWebSearch: true, useMaps: false }
           };
           await storageService.saveSessions([newSession]);
           setSessions([newSession]);
@@ -46,13 +48,12 @@ const App: React.FC = () => {
         }
         setIsDbReady(true);
       } catch (e) {
-        console.error("Failed to initialize SQLite", e);
+        console.error("Initialization error:", e);
       }
     };
     init();
   }, []);
 
-  // Sync state to SQLite on changes
   useEffect(() => {
     if (isDbReady && sessions.length > 0) {
       storageService.saveSessions(sessions);
@@ -62,15 +63,15 @@ const App: React.FC = () => {
   const createNewSession = async () => {
     const newSession: ChatSession = {
       id: crypto.randomUUID(),
-      title: 'New chat',
+      title: 'New Conversation',
       messages: [],
       lastUpdated: Date.now(),
-      settings: { useReasoning: false, useWebSearch: true, useMaps: false }
+      settings: { useReasoning: true, useWebSearch: true, useMaps: false }
     };
     await storageService.saveSessions([newSession]);
     setSessions(prev => [newSession, ...prev]);
     setCurrentSessionId(newSession.id);
-    if (!isSidebarOpen) setIsSidebarOpen(true);
+    if (!isSidebarOpen && window.innerWidth < 768) setIsSidebarOpen(true);
   };
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
@@ -139,12 +140,11 @@ const App: React.FC = () => {
         }
       );
     } catch (e: any) {
-      console.error("Gemini stream error:", e);
       setSessions(prev => prev.map(s => s.id === currentSessionId ? {
         ...s,
         messages: s.messages.map(m => m.id === assistantId ? {
           ...m,
-          content: "Sorry, I encountered an error. Please check your network or API key."
+          content: "I'm having a little trouble connecting right now. Can we try that again?"
         } : m)
       } : s));
     } finally { 
@@ -191,17 +191,19 @@ const App: React.FC = () => {
 
   if (!isDbReady) {
     return (
-      <div className="flex h-screen items-center justify-center bg-white text-blue-600">
+      <div className="flex h-screen items-center justify-center bg-[#fcfcfc]">
         <div className="flex flex-col items-center gap-4">
-          <i className="fas fa-database text-4xl animate-pulse"></i>
-          <p className="text-xs font-black uppercase tracking-widest">Waking up SQLite Engine...</p>
+          <div className="w-16 h-16 bg-teal-500 rounded-2xl animate-bounce flex items-center justify-center shadow-lg">
+             <i className="fas fa-sparkles text-white text-2xl"></i>
+          </div>
+          <p className="text-sm font-medium text-slate-500">Waking up Lumi...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-white text-gray-900 overflow-hidden">
+    <div className="flex h-screen bg-[#fcfcfc] text-slate-800 overflow-hidden font-sans">
       <Sidebar 
         sessions={sessions} 
         currentId={currentSessionId} 
@@ -213,7 +215,7 @@ const App: React.FC = () => {
         toggle={() => setIsSidebarOpen(!isSidebarOpen)}
       />
       
-      <main className="flex-1 relative flex flex-col overflow-hidden">
+      <main className="flex-1 relative flex flex-col overflow-hidden bg-white z-10 my-0 md:my-2 md:mr-2 rounded-none md:rounded-[30px] border-0 md:border border-slate-100 shadow-xl">
         {currentSession ? (
           <ChatInterface 
             session={currentSession}
@@ -229,25 +231,25 @@ const App: React.FC = () => {
             isTyping={isTyping}
             isSidebarOpen={isSidebarOpen}
             onToggleSidebar={() => setIsSidebarOpen(true)}
+            onPreviewCitation={setPreviewCitation}
           />
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-300 relative bg-gray-50/30">
-            {!isSidebarOpen && (
-              <div className="absolute top-0 left-0 p-4 w-full border-b bg-white/80 backdrop-blur-sm min-h-[64px] flex items-center">
-                <button 
-                  onClick={() => setIsSidebarOpen(true)}
-                  className="w-10 h-10 flex items-center justify-center bg-white border border-gray-200 rounded-xl shadow-sm text-gray-500 hover:text-gray-800 transition-all active:scale-90 animate-message"
-                  title="Expand sidebar"
-                >
-                  <i className="fas fa-bars"></i>
-                </button>
-              </div>
-            )}
-            <i className="fas fa-comment-dots text-6xl mb-4 opacity-10"></i>
-            <p className="font-bold uppercase tracking-widest text-xs opacity-50">Select a conversation to begin</p>
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-100">
+               <i className="fas fa-comment-dots text-3xl text-slate-300"></i>
+            </div>
+            <p className="font-medium">Select a conversation to start</p>
           </div>
         )}
       </main>
+      
+      {previewCitation && (
+        <CitationSidebar 
+          url={previewCitation.uri}
+          title={previewCitation.title}
+          onClose={() => setPreviewCitation(null)}
+        />
+      )}
 
       {isKBOpen && (
         <KBManager 

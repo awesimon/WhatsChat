@@ -14,14 +14,8 @@ interface ChatInterfaceProps {
   isTyping: boolean;
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
+  onPreviewCitation?: (citation: { title: string; uri: string }) => void;
 }
-
-const EchoMiniLogo = () => (
-  <div className="relative w-6 h-6 flex items-center justify-center scale-[0.6]">
-    <div className="absolute inset-0 border-[2px] border-sky-500 rounded-full echo-ring-outer"></div>
-    <div className="w-3 h-3 bg-sky-500 rounded-full echo-core-pulse"></div>
-  </div>
-);
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
   session, 
@@ -30,7 +24,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onUpdateSettings, 
   isTyping,
   isSidebarOpen,
-  onToggleSidebar
+  onToggleSidebar,
+  onPreviewCitation
 }) => {
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState<FileMetadata[]>([]);
@@ -38,9 +33,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [session.messages, isTyping]);
 
   const handleSend = () => {
@@ -58,208 +51,243 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const currentKB = knowledgeBases.find(kb => kb.id === session.activeKBId);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-white relative">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white/80 backdrop-blur-md sticky top-0 z-20 h-16">
-        <div className="flex items-center gap-5">
+    <div className="flex-1 flex flex-col h-full relative bg-white/40 backdrop-blur-sm">
+      {/* Friendly Header */}
+      <div className="px-8 py-5 flex items-center justify-between border-b border-slate-50 bg-white/80 backdrop-blur sticky top-0 z-20">
+        <div className="flex items-center gap-4">
           {!isSidebarOpen && (
             <button 
               onClick={onToggleSidebar}
-              className="w-11 h-11 flex items-center justify-center hover:bg-slate-50 border border-slate-100 rounded-xl text-slate-500 transition-all active:scale-90"
-              title="Expand System"
+              className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 transition-colors"
             >
-              <i className="fas fa-sidebar text-lg"></i>
+              <i className="fas fa-bars"></i>
             </button>
           )}
-          <div className="flex items-center gap-5">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] hidden md:block">Neural Link</span>
-            <select 
-              value={session.activeKBId || ''}
-              onChange={(e) => onUpdateSettings({ ...session.settings, activeKBId: e.target.value })}
-              className="text-[13px] font-bold bg-slate-50 border border-slate-100 rounded-xl px-5 py-2 focus:ring-2 focus:ring-sky-500/20 outline-none cursor-pointer transition-all hover:bg-slate-100 min-w-[180px] text-slate-700"
-            >
-              <option value="">Core Processor</option>
-              {knowledgeBases.map(kb => (
-                <option key={kb.id} value={kb.id}>{kb.name}</option>
-              ))}
-            </select>
+          
+          <div className="flex flex-col">
+            <h2 className="font-bold text-slate-800 text-lg flex items-center gap-2">
+              {session.title}
+              {currentKB && <span className="text-[10px] bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full font-bold border border-teal-100">KB: {currentKB.name}</span>}
+            </h2>
+            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+              <span className={`w-2 h-2 rounded-full ${isTyping ? 'bg-teal-500 animate-pulse' : 'bg-teal-300'}`}></span>
+              {isTyping ? 'Lumi is thinking...' : 'Lumi is ready'}
+            </div>
           </div>
         </div>
-        
-        {currentKB && (
-          <div className="hidden sm:flex items-center gap-3 text-[11px] font-bold text-sky-600 bg-sky-50 px-4 py-2 rounded-full border border-sky-100">
-             <i className="fas fa-microchip text-[10px] opacity-60"></i>
-             {currentKB.files.length} Modules Indexed
-          </div>
-        )}
+
+        <select 
+          value={session.activeKBId || ''}
+          onChange={(e) => onUpdateSettings({ ...session.settings, activeKBId: e.target.value })}
+          className="text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-xl px-4 py-2 hover:border-teal-400 cursor-pointer focus:ring-0 shadow-sm transition-colors"
+        >
+          <option value="">✨ General Chat</option>
+          {knowledgeBases.map(kb => (
+            <option key={kb.id} value={kb.id}>📚 {kb.name}</option>
+          ))}
+        </select>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-14 py-12 space-y-12 custom-scrollbar">
+      {/* Chat Stream */}
+      <div className="flex-1 overflow-y-auto px-4 md:px-24 py-8 space-y-10 custom-scrollbar">
         {session.messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-center px-4 animate-message">
-            <div className="relative w-28 h-28 flex items-center justify-center mb-10 group">
-                <div className="absolute inset-0 border-2 border-sky-400/20 rounded-full scale-110 echo-ring-outer"></div>
-                <div className="absolute inset-4 border-2 border-sky-300/10 rounded-full scale-90 echo-ring-inner"></div>
-                <div className="w-12 h-12 bg-sky-500 rounded-full echo-core-pulse shadow-[0_0_30px_#0ea5e9]"></div>
+          <div className="h-full flex flex-col items-center justify-center text-center animate-float pb-20">
+            <div className="w-24 h-24 bg-gradient-to-tr from-teal-500 to-emerald-400 rounded-[2rem] flex items-center justify-center shadow-2xl shadow-teal-100 mb-6">
+               <i className="fas fa-hand-sparkles text-white text-4xl"></i>
             </div>
-            <h1 className="text-4xl font-extrabold text-slate-900 mb-5 tracking-tight">How shall we proceed?</h1>
-            <p className="text-slate-500 text-lg font-medium max-w-lg mb-14 leading-relaxed opacity-80">
-              I am <span className="text-sky-600 font-bold">ECHO</span>. My neural processors are synchronized with Gemini 3 Pro for real-time analysis and global intelligence.
+            <h1 className="text-3xl font-bold text-slate-800 mb-3 font-outfit">Hello, I'm Lumi!</h1>
+            <p className="text-slate-500 max-w-md text-lg">
+              I can help you analyze documents, plan your day, or just chat. How can I assist you?
             </p>
-            <div className="flex gap-4 flex-wrap justify-center max-w-3xl">
-              {['Analyze market volatility', 'Draft system architecture', 'Synthesize research data', 'Generate creative concepts'].map((hint) => (
-                <button 
-                  key={hint} 
-                  onClick={() => setInputText(hint)} 
-                  className="p-4 px-8 border border-slate-100 rounded-2xl hover:bg-sky-50/50 hover:border-sky-200 hover:text-sky-700 text-[14px] font-bold text-slate-600 transition-all active:scale-95 bg-white shadow-sm"
-                >
-                  {hint}
-                </button>
-              ))}
-            </div>
           </div>
         )}
+        
         {session.messages.map((msg, idx) => (
           <MessageItem 
             key={msg.id} 
             message={msg} 
             isLast={idx === session.messages.length - 1} 
             isTyping={isTyping} 
+            onPreviewCitation={onPreviewCitation}
           />
         ))}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="px-6 pb-12 pt-4 max-w-4xl mx-auto w-full">
-        <div className="input-box rounded-[32px] overflow-hidden flex flex-col p-3">
-          <textarea 
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            placeholder="System input command..."
-            className="w-full bg-transparent border-none py-5 px-6 text-slate-800 focus:ring-0 outline-none min-h-[64px] max-h-60 resize-none text-[18px] font-medium placeholder-slate-400"
-          />
+      {/* Floating Input Bar */}
+      <div className="p-6 max-w-4xl mx-auto w-full relative z-30">
+        <div className="bg-white rounded-[2rem] p-3 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.1)] border border-slate-200 transition-all focus-within:shadow-[0_20px_40px_-10px_rgba(13,148,136,0.15)] focus-within:border-teal-300">
+          <div className="px-3 pt-1">
+            <textarea 
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+              placeholder="Ask me anything..."
+              className="w-full bg-transparent border-none text-slate-700 placeholder-slate-400 focus:ring-0 outline-none min-h-[44px] max-h-32 resize-none text-lg"
+              style={{ fontFamily: 'Nunito, sans-serif' }}
+            />
+          </div>
           
-          <div className="flex items-center justify-between px-3 pb-3">
-            <div className="flex items-center gap-3 overflow-x-auto no-scrollbar py-1">
-              <ToolPill active={session.settings.useReasoning} onClick={() => toggleSetting('useReasoning')} icon="fa-bolt" label="Analysis" />
-              <ToolPill active={session.settings.useWebSearch} onClick={() => toggleSetting('useWebSearch')} icon="fa-satellite" label="Net Search" />
-              <ToolPill active={session.settings.useMaps} onClick={() => toggleSetting('useMaps')} icon="fa-location-crosshairs" label="Geo Link" />
+          <div className="flex items-center justify-between px-2 pt-2">
+            <div className="flex items-center gap-1.5">
+              <ToolToggle active={session.settings.useReasoning} onClick={() => toggleSetting('useReasoning')} icon="fa-lightbulb" label="Think" />
+              <ToolToggle active={session.settings.useWebSearch} onClick={() => toggleSetting('useWebSearch')} icon="fa-globe" label="Web" />
+              <ToolToggle active={session.settings.useMaps} onClick={() => toggleSetting('useMaps')} icon="fa-map-marker-alt" label="Maps" />
             </div>
             
-            <div className="flex items-center gap-2 ml-4">
-              <IconButton icon="fa-waveform" onClick={() => {}} title="Voice" />
-              <IconButton icon="fa-paperclip" onClick={() => fileInputRef.current?.click()} title="Data" />
-              <button 
+            <div className="flex items-center gap-3">
+               <button 
+                 onClick={() => fileInputRef.current?.click()} 
+                 className="w-10 h-10 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 hover:text-teal-600 transition-colors"
+               >
+                 <i className="fas fa-paperclip"></i>
+               </button>
+               <button 
                 onClick={handleSend}
                 disabled={!inputText.trim() && attachments.length === 0}
-                className={`ml-2 w-14 h-14 flex items-center justify-center rounded-[22px] transition-all active:scale-90 ${
+                className={`h-10 px-6 rounded-full font-bold transition-all flex items-center gap-2 ${
                   (!inputText.trim() && attachments.length === 0) 
-                  ? 'bg-slate-50 text-slate-300 cursor-not-allowed' 
-                  : 'bg-sky-600 text-white shadow-xl shadow-sky-500/20 hover:bg-sky-700 hover:shadow-sky-500/30'
+                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                  : 'bg-teal-600 text-white shadow-lg shadow-teal-200 hover:bg-teal-700 hover:shadow-xl hover:-translate-y-0.5'
                 }`}
               >
-                <i className="fas fa-arrow-up text-xl"></i>
+                <span>Send</span>
+                <i className="fas fa-paper-plane text-sm"></i>
               </button>
             </div>
           </div>
         </div>
+        <div className="text-center mt-3 text-xs text-slate-400 font-medium">
+          Lumi can make mistakes. Please verify important information.
+        </div>
       </div>
+      <input type="file" ref={fileInputRef} className="hidden" multiple />
     </div>
   );
 };
 
-const ToolPill: React.FC<{ active: boolean; onClick: () => void; icon: string; label: string }> = ({ active, onClick, icon, label }) => (
+const ToolToggle: React.FC<{ active: boolean; onClick: () => void; icon: string; label: string }> = ({ active, onClick, icon, label }) => (
   <button 
     onClick={onClick}
-    className={`flex items-center gap-2.5 p-2.5 px-4 rounded-xl transition-all active:scale-95 border ${
+    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
       active 
-        ? 'bg-sky-600 border-sky-600 text-white shadow-md shadow-sky-500/10' 
-        : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100 hover:border-slate-200'
+        ? 'bg-teal-50 text-teal-700 border border-teal-100' 
+        : 'text-slate-500 hover:bg-slate-50 border border-transparent'
     }`}
   >
-    <i className={`fas ${icon} text-[12px]`}></i>
-    <span className="text-[11.5px] font-black uppercase tracking-widest">{label}</span>
+    <i className={`fas ${icon} ${active ? 'text-amber-500' : ''}`}></i> {label}
   </button>
 );
 
-const IconButton: React.FC<{ icon: string; onClick: () => void; title: string }> = ({ icon, onClick, title }) => (
-  <button 
-    onClick={onClick}
-    className="w-12 h-12 flex items-center justify-center rounded-xl text-slate-400 hover:text-sky-600 hover:bg-sky-50 transition-all active:scale-90"
-    title={title}
-  >
-    <i className={`fas ${icon} text-lg`}></i>
-  </button>
-);
-
-const MessageItem: React.FC<{ message: ChatMessage; isLast: boolean; isTyping: boolean }> = ({ message, isLast, isTyping }) => {
+const MessageItem: React.FC<{ 
+  message: ChatMessage; 
+  isLast: boolean; 
+  isTyping: boolean;
+  onPreviewCitation?: (citation: { title: string; uri: string }) => void;
+}> = ({ message, isLast, isTyping, onPreviewCitation }) => {
   const isUser = message.role === Role.USER;
   const [showThought, setShowThought] = useState(true);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (isLast && isTyping && message.thought) setShowThought(true);
   }, [message.thought, isLast, isTyping]);
 
   return (
-    <div className={`group max-w-4xl mx-auto flex gap-6 animate-message ${isUser ? 'flex-row-reverse' : ''}`}>
-      <div className={`w-11 h-11 rounded-2xl shrink-0 flex items-center justify-center border transition-all ${
-        isUser ? 'bg-sky-600 border-sky-600 shadow-lg shadow-sky-500/20' : 'bg-white border-slate-200 shadow-sm'
+    <div className={`flex gap-4 md:gap-6 ${isUser ? 'flex-row-reverse' : ''} group mb-6 animate-in fade-in duration-500`}>
+      {/* Avatar */}
+      <div className={`w-9 h-9 shrink-0 flex items-center justify-center rounded-xl shadow-sm ${
+        isUser 
+          ? 'bg-white border border-slate-100 text-slate-400' 
+          : 'bg-teal-600 text-white shadow-teal-200'
       }`}>
-        {isUser ? <i className="fas fa-user text-white text-sm"></i> : <EchoMiniLogo />}
+        {isUser ? <i className="fas fa-user"></i> : <i className="fas fa-sparkles"></i>}
       </div>
       
-      <div className={`flex-1 min-w-0 space-y-6 ${isUser ? 'flex flex-col items-end' : ''}`}>
+      <div className={`flex-1 min-w-0 flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+        {/* Thought Bubble for Reasoning */}
         {message.thought && !isUser && (
-          <div className="w-full space-y-3">
+          <div className="w-full max-w-2xl mb-4">
             <button 
               onClick={() => setShowThought(!showThought)}
-              className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] hover:text-sky-600 flex items-center gap-3 py-1 transition-colors"
+              className="flex items-center gap-2 text-[10px] font-bold text-slate-400 hover:text-teal-600 transition-colors mb-2 px-1 uppercase tracking-wider"
             >
-              <i className={`fas ${showThought ? 'fa-chevron-down' : 'fa-chevron-right'} transition-transform`}></i> 
-              Logical Core Diagnostics
+              <i className={`fas ${showThought ? 'fa-chevron-down' : 'fa-chevron-right'}`}></i> 
+              Thinking Process
             </button>
             <div className={`expand-grid ${showThought ? 'expanded' : ''}`}>
               <div className="expand-content">
-                <div className="p-6 rounded-3xl text-[14px] text-slate-500 leading-relaxed italic whitespace-pre-wrap mb-3 bg-slate-50/50 border border-slate-100 font-mono shadow-inner border-l-4 border-l-sky-400">
-                  {message.thought}
+                <div className="bg-white border border-slate-200 rounded-xl p-5 text-sm text-slate-600 leading-relaxed relative shadow-sm">
+                  <div className="flex items-center gap-2 mb-3 text-amber-500 font-bold text-xs uppercase tracking-wider">
+                     <i className="fas fa-lightbulb"></i> Analysis
+                  </div>
+                  <div className="whitespace-pre-wrap font-mono text-xs opacity-90 text-slate-500">{message.thought}</div>
                 </div>
               </div>
             </div>
           </div>
         )}
 
+        {/* Tool Invocations */}
         {message.toolInvocations && message.toolInvocations.length > 0 && (
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2 mb-2">
             {message.toolInvocations.map((ti, i) => (
-              <div key={i} className="text-[10px] font-black bg-white text-sky-700 px-5 py-2.5 rounded-xl border border-sky-100 flex items-center gap-3 uppercase tracking-widest shadow-sm">
-                <i className="fas fa-microchip text-sky-400 animate-pulse"></i> Protocol: {ti.name}
+              <div key={i} className="bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></div>
+                Used: <span className="font-bold">{ti.name}</span>
               </div>
             ))}
           </div>
         )}
 
-        <div className={`relative flex items-center group/bubble gap-4 ${isUser ? 'flex-row-reverse' : ''}`}>
-          <div className={`${isUser ? 'user-bubble' : 'ai-response prose text-slate-800'}`}>
+        {/* Main Content Bubble */}
+        <div className={`relative max-w-2xl ${isUser ? 'text-right' : 'text-left'}`}>
+          <div className={`inline-block px-6 py-4 rounded-2xl ${
+            isUser 
+              ? 'bg-gradient-to-br from-teal-500 to-teal-600 text-white shadow-md shadow-teal-100 rounded-tr-none' 
+              : 'bg-white text-slate-700 shadow-sm border border-slate-100 rounded-tl-none'
+          }`}>
             {isUser ? (
-              message.content
+              <div className="text-base font-medium">{message.content}</div>
             ) : (
-              message.content ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeHighlight]}>
-                  {message.content}
-                </ReactMarkdown>
-              ) : (
-                isLast && isTyping && (
-                  <div className="flex gap-2 py-3">
-                    <div className="w-2.5 h-2.5 bg-sky-200 rounded-full animate-bounce"></div>
-                    <div className="w-2.5 h-2.5 bg-sky-300 rounded-full animate-bounce delay-150"></div>
-                    <div className="w-2.5 h-2.5 bg-sky-400 rounded-full animate-bounce delay-300"></div>
-                  </div>
-                )
-              )
+              <div className="prose prose-p:text-slate-700 prose-headings:text-slate-800 prose-strong:text-teal-700 max-w-none">
+                {message.content ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeHighlight]}>
+                    {message.content}
+                  </ReactMarkdown>
+                ) : (
+                   isLast && isTyping && (
+                     <div className="flex gap-1.5 items-center h-6 px-2">
+                       <div className="w-2 h-2 bg-teal-400 rounded-full typing-dot"></div>
+                       <div className="w-2 h-2 bg-teal-400 rounded-full typing-dot"></div>
+                       <div className="w-2 h-2 bg-teal-400 rounded-full typing-dot"></div>
+                     </div>
+                   )
+                )}
+              </div>
+            )}
+            
+            {/* Citations at the end of the bubble */}
+            {message.groundingSources && message.groundingSources.length > 0 && !isUser && (
+              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-2">
+                {message.groundingSources.map((src, i) => (
+                  <button 
+                    key={i} 
+                    onClick={() => onPreviewCitation?.(src)}
+                    className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full text-[10px] font-bold text-slate-500 hover:text-teal-700 hover:bg-teal-50 hover:border-teal-200 transition-all max-w-full"
+                  >
+                    <span className="w-4 h-4 rounded-full bg-white flex items-center justify-center shadow-sm shrink-0">
+                      <img 
+                        src={`https://www.google.com/s2/favicons?domain=${new URL(src.uri).hostname}`} 
+                        alt="" 
+                        className="w-2.5 h-2.5 opacity-70"
+                        onError={(e) => { (e.target as HTMLImageElement).src = 'about:blank'; (e.target as HTMLImageElement).className = 'hidden'; }} 
+                      />
+                      <i className={`fas fa-link text-[8px] ${new URL(src.uri).hostname ? 'hidden' : 'block'}`}></i>
+                    </span>
+                    <span className="truncate max-w-[150px]">{src.title}</span>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         </div>

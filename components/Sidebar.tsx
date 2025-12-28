@@ -13,98 +13,87 @@ interface SidebarProps {
   toggle: () => void;
 }
 
-const EchoLogo = () => (
-  <div className="relative w-9 h-9 flex items-center justify-center">
-    {/* Outer Ring */}
-    <div className="absolute inset-0 border-[1.5px] border-sky-400/30 rounded-full echo-ring-outer">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-sky-400 rounded-full shadow-[0_0_8px_#38bdf8]"></div>
-    </div>
-    {/* Inner Ring */}
-    <div className="absolute inset-2 border-[1px] border-sky-300/40 rounded-full echo-ring-inner">
-      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-cyan-300 rounded-full"></div>
-    </div>
-    {/* Core */}
-    <div className="w-2.5 h-2.5 bg-sky-500 rounded-full echo-core-pulse shadow-[0_0_12px_#0ea5e9]"></div>
-  </div>
-);
-
 const Sidebar: React.FC<SidebarProps> = ({ sessions, currentId, onSelect, onNew, onDelete, onOpenKB, isOpen, toggle }) => {
   return (
-    <div className={`sidebar-transition h-full flex flex-col bg-[#f8fafc] border-r border-slate-200/60 shrink-0 z-40 relative ${isOpen ? 'w-[280px]' : 'w-0 overflow-hidden'}`}>
+    <div className={`transition-all duration-300 h-full flex flex-col bg-[#fcfcfc] shrink-0 relative ${isOpen ? 'w-[280px]' : 'w-0 overflow-hidden'}`}>
       <div className="min-w-[280px] flex flex-col h-full">
         {/* Header */}
-        <div className="px-6 pt-8 pb-7 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-             <EchoLogo />
-             <span className="font-extrabold text-[17px] tracking-[-0.03em] text-slate-800">ECHO</span>
+        <div className="px-6 pt-8 pb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+             <div className="w-9 h-9 bg-teal-600 rounded-xl flex items-center justify-center shadow-lg shadow-teal-100">
+                <i className="fas fa-sparkles text-white text-sm"></i>
+             </div>
+             <span className="font-bold text-xl text-slate-800 tracking-tight">Lumi</span>
           </div>
           <button 
             onClick={toggle} 
-            className="w-9 h-9 flex items-center justify-center hover:bg-slate-200/50 rounded-xl text-slate-400 hover:text-slate-600 transition-all active:scale-90"
+            className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
           >
-            <i className="fas fa-sidebar text-lg"></i>
+            <i className="fas fa-chevron-left"></i>
           </button>
         </div>
 
-        {/* Primary Action */}
-        <div className="px-6 mb-8">
+        {/* Action Button */}
+        <div className="px-6 py-4">
           <button 
             onClick={onNew} 
-            className="w-full flex items-center justify-center gap-2.5 bg-white border border-slate-200 hover:border-sky-300 hover:bg-sky-50/30 text-sky-600 font-bold py-3.5 rounded-[20px] transition-all shadow-sm active:scale-[0.97]"
+            className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 hover:border-teal-300 text-teal-700 font-bold py-3.5 rounded-2xl transition-all shadow-sm hover:shadow-md active:scale-95 group"
           >
-            <i className="fas fa-plus text-[11px]"></i>
-            <span className="text-[13.5px]">Initiate Session</span>
+            <i className="fas fa-plus text-sm group-hover:rotate-90 transition-transform"></i>
+            <span className="text-sm">New Chat</span>
           </button>
         </div>
 
-        {/* Navigation List */}
-        <div className="flex-1 overflow-y-auto px-3 space-y-1 custom-scrollbar">
-          <div className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2 opacity-70">Diagnostic Logs</div>
+        {/* Sessions List */}
+        <div className="flex-1 overflow-y-auto px-4 space-y-1 custom-scrollbar">
+          <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase tracking-wider">Your Chats</div>
           {sessions.map((session) => (
             <div 
               key={session.id}
-              className={`group relative flex items-center p-3.5 px-4 rounded-[18px] cursor-pointer transition-all duration-200 ${
-                currentId === session.id 
-                  ? 'bg-white shadow-md ring-1 ring-slate-200/50 text-sky-600' 
-                  : 'hover:bg-slate-200/40 text-slate-600'
-              }`}
               onClick={() => onSelect(session.id)}
+              className={`group flex items-center p-3 rounded-xl cursor-pointer transition-all ${
+                currentId === session.id 
+                  ? 'bg-teal-50 text-teal-800 font-semibold' 
+                  : 'text-slate-500 hover:bg-slate-100/50 hover:text-slate-700'
+              }`}
             >
-              <div className={`w-1.5 h-1.5 rounded-full mr-4 shrink-0 transition-all ${currentId === session.id ? 'bg-sky-500 scale-125 shadow-[0_0_8px_#0ea5e9]' : 'bg-slate-300'}`}></div>
-              <span className={`truncate flex-1 text-[13.5px] tracking-tight ${currentId === session.id ? 'font-bold' : 'font-semibold'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 transition-colors ${
+                currentId === session.id ? 'bg-white text-teal-600 shadow-sm' : 'bg-transparent text-slate-400'
+              }`}>
+                <i className="fas fa-comment-alt text-xs"></i>
+              </div>
+              <span className="truncate flex-1 text-sm">
                 {session.title}
               </span>
-              
               <button 
                 onClick={(e) => { e.stopPropagation(); onDelete(session.id); }}
-                className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-rose-500 transition-all ml-1 rounded-lg hover:bg-rose-50"
-                title="Purge"
+                className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all"
               >
-                <i className="fas fa-trash-can text-[11px]"></i>
+                <i className="fas fa-times text-xs"></i>
               </button>
             </div>
           ))}
-          
-          {sessions.length === 0 && (
-            <div className="py-20 flex flex-col items-center justify-center opacity-10">
-              <i className="fas fa-microchip text-4xl mb-3"></i>
-              <p className="text-[10px] font-black uppercase tracking-widest">System Idle</p>
-            </div>
-          )}
         </div>
 
         {/* Footer */}
-        <div className="p-5 bg-slate-100/30 border-t border-slate-200/40 mt-auto">
-          <SidebarNavButton icon="fa-brain-circuit" label="Neural Hub" onClick={onOpenKB} highlight />
-          <SidebarNavButton icon="fa-sliders" label="Core Settings" onClick={() => {}} />
+        <div className="p-4 mx-4 mb-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+          <button 
+            onClick={onOpenKB}
+            className="w-full flex items-center gap-3 p-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
+              <i className="fas fa-book-open text-xs"></i>
+            </div>
+            <span>Knowledge Base</span>
+          </button>
           
-          <div className="mt-5 pt-5 border-t border-slate-200/60 flex items-center gap-3.5 px-2">
-             <div className="w-8 h-8 rounded-full bg-slate-200 border-2 border-white shadow-sm flex items-center justify-center text-slate-400 text-[11px]">
-                <i className="fas fa-user-robot"></i>
+          <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-3 px-2">
+             <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                <i className="fas fa-user"></i>
              </div>
              <div className="flex flex-col">
-                <span className="text-[11.5px] font-bold text-slate-700">Protocol Beta</span>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Active Link</span>
+                <span className="text-xs font-bold text-slate-700">Guest User</span>
+                <span className="text-[10px] text-slate-400">Pro Plan Active</span>
              </div>
           </div>
         </div>
@@ -112,19 +101,5 @@ const Sidebar: React.FC<SidebarProps> = ({ sessions, currentId, onSelect, onNew,
     </div>
   );
 };
-
-const SidebarNavButton: React.FC<{ icon: string; label: string; onClick: () => void; highlight?: boolean }> = ({ icon, label, onClick, highlight }) => (
-  <button 
-    onClick={onClick}
-    className="w-full flex items-center gap-4 p-3 px-4 rounded-xl text-[13.5px] font-bold transition-all group text-slate-600 hover:bg-white hover:shadow-sm active:scale-95"
-  >
-    <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all group-hover:scale-105 ${
-      highlight ? 'bg-sky-50 text-sky-600 border border-sky-100' : 'bg-slate-100 text-slate-400'
-    }`}>
-      <i className={`fas ${icon} text-[13px]`}></i>
-    </div>
-    {label}
-  </button>
-);
 
 export default Sidebar;

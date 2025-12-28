@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gemini Light - AI Assistant</title>
+  <title>ECHO - Advanced AI Assistant</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/sql-wasm.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -14,10 +14,10 @@
     
     :root {
       --bg-main: #ffffff;
-      --bg-sidebar: #f7f9fc;
-      --accent-blue: #1a73e8;
-      --text-main: #1c1e21;
-      --text-muted: #64748b;
+      --bg-sidebar: #f8fafc;
+      --accent-echo: #0ea5e9;
+      --accent-echo-glow: #22d3ee;
+      --text-main: #0f172a;
       --border-color: #f1f5f9;
     }
 
@@ -38,57 +38,46 @@
       transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
+    /* ECHO Core Animation */
+    @keyframes orbit-cw { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes orbit-ccw { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+    @keyframes pulse-soft { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } }
+
+    .echo-ring-outer { animation: orbit-cw 8s linear infinite; }
+    .echo-ring-inner { animation: orbit-ccw 4s linear infinite; }
+    .echo-core-pulse { animation: pulse-soft 2s ease-in-out infinite; }
+
     .input-box {
-      box-shadow: 0 2px 10px rgba(0,0,0,0.03), 0 8px 32px rgba(0,0,0,0.04);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.02), 0 10px 40px rgba(0,0,0,0.04);
       transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-      border: 1px solid #edf2f7;
+      border: 1px solid #f1f5f9;
       background-color: #ffffff;
     }
 
     .input-box:focus-within {
-      box-shadow: 0 12px 48px rgba(0,0,0,0.08);
-      border-color: #e2e8f0;
-    }
-
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .animate-message {
-      animation: slideIn 0.4s ease-out forwards;
-    }
-
-    .prose { font-size: 16px; line-height: 1.75; color: #334155; }
-    .prose code { font-family: 'JetBrains Mono', monospace; background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 6px; font-size: 0.9em; }
-    .prose pre { background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 16px; padding: 1.5rem; margin: 1.5rem 0; }
-    
-    .user-bubble {
-      background-color: #f8fafc;
-      border: 1px solid #f1f5f9;
-      border-radius: 24px;
-      padding: 1rem 1.5rem;
-      max-width: 85%;
-      font-size: 16px;
+      box-shadow: 0 12px 48px rgba(14, 165, 233, 0.08);
+      border-color: #bae6fd;
     }
 
     .active-session {
       background: #ffffff;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-      border-left: 3px solid var(--accent-blue);
+      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.05);
+      border-left: 3px solid var(--accent-echo);
     }
 
-    .toggle-pill {
-      font-size: 11px;
-      font-weight: 800;
-      letter-spacing: 0.05em;
-      transition: all 0.2s;
-    }
+    .prose { font-size: 16px; line-height: 1.75; color: #334155; }
+    .prose pre { border-radius: 20px; border: 1px solid #f1f5f9; }
 
-    .glass-footer {
-      background: rgba(247, 249, 252, 0.85);
-      backdrop-filter: blur(12px);
-      border-top: 1px solid rgba(0,0,0,0.03);
+    .expand-grid { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s ease-out; }
+    .expand-grid.expanded { grid-template-rows: 1fr; }
+    .expand-content { overflow: hidden; }
+
+    .user-bubble {
+      background-color: #f8fafc;
+      border: 1px solid #f1f5f9;
+      border-radius: 24px;
+      padding: 1.2rem 1.6rem;
+      max-width: 85%;
     }
 
     .no-scrollbar::-webkit-scrollbar { display: none; }

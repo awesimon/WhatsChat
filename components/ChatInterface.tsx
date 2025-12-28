@@ -17,6 +17,45 @@ interface ChatInterfaceProps {
   onPreviewCitation?: (citation: { title: string; uri: string }) => void;
 }
 
+const SUGGESTION_CATEGORIES = {
+  write: {
+    id: 'write',
+    label: 'Write for me',
+    icon: 'fa-pen-nib',
+    color: 'text-blue-500',
+    prompts: [
+      "Write a satire about modern smartphone addiction",
+      "Create a superhero origin story for a hamster",
+      "Draft a polite but firm email declining a meeting",
+      "Write a short story about a library that exists outside of time"
+    ]
+  },
+  study: {
+    id: 'study',
+    label: 'Help me study',
+    icon: 'fa-graduation-cap',
+    color: 'text-indigo-500',
+    prompts: [
+      "Explain the concept of 'entropy' to a 10-year-old",
+      "Summarize the key events of the French Revolution",
+      "Create a 3-day study schedule for a biology exam",
+      "What are the differences between classical and quantum mechanics?"
+    ]
+  },
+  lifestyle: {
+    id: 'lifestyle',
+    label: 'Energize day',
+    icon: 'fa-leaf',
+    color: 'text-green-500',
+    prompts: [
+      "Design a low-impact 15-minute workout routine",
+      "Suggest 3 healthy & quick breakfast recipes",
+      "Give me a strategy to organize my chaotic to-do list",
+      "List 5 mindfulness techniques for stress relief"
+    ]
+  }
+};
+
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
   session, 
   knowledgeBases, 
@@ -24,11 +63,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onUpdateSettings, 
   isTyping,
   isSidebarOpen, 
-  onToggleSidebar,
+  onToggleSidebar, 
   onPreviewCitation
 }) => {
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState<FileMetadata[]>([]);
+  const [activeCategory, setActiveCategory] = useState<keyof typeof SUGGESTION_CATEGORIES | null>(null);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hasMessages = session.messages.length > 0;
@@ -45,11 +86,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       onSendMessage(inputText, attachments, session.settings);
       setInputText('');
       setAttachments([]);
+      setActiveCategory(null);
     }
   };
 
   const handleSuggestion = (text: string) => {
     onSendMessage(text, [], session.settings);
+    setActiveCategory(null);
   };
 
   const toggleSetting = (key: string) => {
@@ -83,6 +126,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   return (
     <div className="flex-1 flex flex-col h-full relative bg-white/40 backdrop-blur-sm overflow-hidden font-nunito">
+      {/* Dynamic Animations Styles */}
+      <style>{`
+        @keyframes slideIn {
+          from { opacity: 0; transform: translateY(12px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .animate-slide-in {
+          animation: slideIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+        @keyframes particle-fly {
+          0% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
+          100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0); opacity: 0; }
+        }
+      `}</style>
+
       {/* Friendly Header - Fade out when empty to focus on center content */}
       <div className={`px-8 py-5 flex items-center justify-between absolute top-0 left-0 right-0 z-20 transition-all duration-500 ${hasMessages ? 'opacity-100 translate-y-0 bg-white/80 backdrop-blur border-b border-slate-50' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
         <div className="flex items-center gap-4">
@@ -159,7 +217,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <div className={`absolute left-0 right-0 z-30 transition-all duration-[800ms] cubic-bezier(0.22, 1, 0.36, 1) flex flex-col items-center px-4 md:px-6 ${
             hasMessages 
                 ? 'bottom-8 translate-y-0' 
-                : 'bottom-1/2 translate-y-[60%]' 
+                : 'bottom-1/2 translate-y-[50%]' 
         }`}>
             <div className="w-full max-w-4xl relative">
                 {/* Particle Effects Container */}
@@ -259,13 +317,46 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   </div>
                 </div>
 
-                {/* Suggestions Chips - Below input, visible only when centered */}
-                <div className={`mt-8 flex flex-wrap justify-center gap-3 transition-all duration-500 ${hasMessages ? 'opacity-0 scale-95 pointer-events-none h-0 overflow-hidden' : 'opacity-100 scale-100'}`}>
-                   <SuggestionChip icon="fa-image" label="Create image" color="text-yellow-500" onClick={() => handleSuggestion("Generate an image of a futuristic city with flying cars")} />
-                   <SuggestionChip icon="fa-video" label="Create video" color="text-purple-500" onClick={() => handleSuggestion("Create a short video of a robot dancing")} />
-                   <SuggestionChip icon="fa-pen-nib" label="Write for me" color="text-blue-500" onClick={() => handleSuggestion("Write a short story about a time traveler")} />
-                   <SuggestionChip icon="fa-graduation-cap" label="Help me study" color="text-indigo-500" onClick={() => handleSuggestion("Explain quantum computing to a 5 year old")} />
-                   <SuggestionChip icon="fa-leaf" label="Energize day" color="text-green-500" onClick={() => handleSuggestion("Give me 5 productivity tips for today")} />
+                {/* Interactive Suggestions Container */}
+                <div className={`mt-8 flex flex-col items-center gap-6 transition-all duration-500 ${hasMessages ? 'opacity-0 scale-95 pointer-events-none h-0 overflow-hidden' : 'opacity-100 scale-100'}`}>
+                   {/* Category Chips */}
+                   <div className="flex flex-wrap justify-center gap-3">
+                       {Object.values(SUGGESTION_CATEGORIES).map(cat => (
+                           <SuggestionChip 
+                             key={cat.id}
+                             icon={cat.icon} 
+                             label={cat.label} 
+                             color={cat.color} 
+                             isActive={activeCategory === cat.id}
+                             onClick={() => setActiveCategory(activeCategory === cat.id ? null : cat.id as any)} 
+                           />
+                       ))}
+                   </div>
+
+                   {/* Example Prompts List - Collapsible with animation */}
+                   <div className={`w-full max-w-2xl grid transition-all duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] ${
+                       activeCategory 
+                         ? 'grid-rows-[1fr] opacity-100 mt-2' 
+                         : 'grid-rows-[0fr] opacity-0 mt-0'
+                   }`}>
+                     <div className="overflow-hidden">
+                        {/* Key is crucial here: Changing key forces React to remount the list, triggering the entry animation */}
+                        {activeCategory && (
+                            <div key={activeCategory} className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-2">
+                                {SUGGESTION_CATEGORIES[activeCategory].prompts.map((prompt, idx) => (
+                                    <button 
+                                        key={`${activeCategory}-${idx}`}
+                                        onClick={() => handleSuggestion(prompt)}
+                                        className="text-left p-4 rounded-xl bg-white/50 border border-slate-200 hover:bg-white hover:border-indigo-200 hover:shadow-md transition-all text-slate-600 font-medium text-base group opacity-0 animate-slide-in"
+                                        style={{ animationDelay: `${idx * 60}ms` }}
+                                    >
+                                        <span className="group-hover:text-indigo-600 transition-colors">{prompt}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                     </div>
+                   </div>
                 </div>
                 
                 {/* Footer Text */}
@@ -300,13 +391,17 @@ const ImageAttachment: React.FC<{ attachment: FileMetadata }> = ({ attachment })
   );
 };
 
-const SuggestionChip: React.FC<{ icon: string; label: string; color: string; onClick: () => void }> = ({ icon, label, color, onClick }) => (
+const SuggestionChip: React.FC<{ icon: string; label: string; color: string; onClick: () => void; isActive?: boolean }> = ({ icon, label, color, onClick, isActive }) => (
   <button 
     onClick={onClick}
-    className="flex items-center gap-3 px-6 py-3 bg-white rounded-full shadow-sm border border-slate-100 hover:border-slate-200 hover:shadow-md hover:-translate-y-0.5 transition-all group"
+    className={`flex items-center gap-3 px-6 py-3 rounded-full shadow-sm border transition-all duration-300 group ${
+      isActive 
+        ? 'bg-slate-800 text-white border-slate-800 scale-105 shadow-md' 
+        : 'bg-white text-slate-600 border-slate-100 hover:border-slate-200 hover:shadow-md hover:-translate-y-0.5'
+    }`}
   >
-    <i className={`fas ${icon} ${color} text-base group-hover:scale-110 transition-transform`}></i>
-    <span className="text-base font-semibold text-slate-600">{label}</span>
+    <i className={`fas ${icon} text-base group-hover:scale-110 transition-transform ${isActive ? 'text-white' : color}`}></i>
+    <span className="text-base font-semibold">{label}</span>
   </button>
 );
 
@@ -350,12 +445,6 @@ const ParticleBurst: React.FC<{ trigger: boolean }> = ({ trigger }) => {
 
   return (
     <div className="absolute inset-0 overflow-visible pointer-events-none z-0">
-        <style>{`
-            @keyframes particle-fly {
-                0% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
-                100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0); opacity: 0; }
-            }
-        `}</style>
         {particles}
     </div>
   );

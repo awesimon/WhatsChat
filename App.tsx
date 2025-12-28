@@ -16,6 +16,7 @@ const App: React.FC = () => {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [draftSession, setDraftSession] = useState<ChatSession | null>(null); // State for lazy session creation
   const [currentView, setCurrentView] = useState<ViewState>('chat');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
@@ -38,16 +39,8 @@ const App: React.FC = () => {
           setSessions(savedSessions);
           setCurrentSessionId(savedSessions[0].id);
         } else {
-          const newSession: ChatSession = {
-            id: crypto.randomUUID(),
-            title: 'Hello there! 👋',
-            messages: [],
-            lastUpdated: Date.now(),
-            settings: { useReasoning: true, useWebSearch: true, useMaps: false }
-          };
-          await storageService.saveSessions([newSession]);
-          setSessions([newSession]);
-          setCurrentSessionId(newSession.id);
+          // Start with a draft session instead of creating one in DB immediately
+          createDraftSession();
         }
         setIsDbReady(true);
       } catch (e: any) {
@@ -69,7 +62,7 @@ const App: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [sessions, isDbReady]);
 
-  const createNewSession = async () => {
+  const createDraftSession = () => {
     const newSession: ChatSession = {
       id: crypto.randomUUID(),
       title: 'New Conversation',
@@ -77,32 +70,77 @@ const App: React.FC = () => {
       lastUpdated: Date.now(),
       settings: { useReasoning: true, useWebSearch: true, useMaps: false }
     };
-    // Immediate save for new session is fine
-    await storageService.saveSessions([newSession]);
-    setSessions(prev => [newSession, ...prev]);
-    setCurrentSessionId(newSession.id);
+    setDraftSession(newSession);
+    setCurrentSessionId(null);
     setCurrentView('chat');
-    if (!isSidebarOpen && window.innerWidth < 768) setIsSidebarOpen(true);
   };
 
-  const currentSession = sessions.find(s => s.id === currentSessionId);
+  const createNewSession = useCallback(() => {
+    // 1. If we are already in a draft session, do nothing
+    if (draftSession) {
+        setCurrentView('chat');
+        if (!isSidebarOpen && window.innerWidth < 768) setIsSidebarOpen(true);
+        return;
+    }
+
+    // 2. If the current active session is empty, just reuse it
+    if (currentSessionId) {
+        const curr = sessions.find(s => s.id === currentSessionId);
+        if (curr && curr.messages.length === 0) {
+            setCurrentView('chat');
+            if (!isSidebarOpen && window.innerWidth < 768) setIsSidebarOpen(true);
+            return;
+        }
+    }
+
+    // 3. Create a new draft session (not saved to list yet)
+    createDraftSession();
+    if (!isSidebarOpen && window.innerWidth < 768) setIsSidebarOpen(true);
+  }, [draftSession, currentSessionId, sessions, isSidebarOpen]);
+
+  // Derived active session (either from DB or the draft)
+  const activeSession = currentSessionId 
+    ? sessions.find(s => s.id === currentSessionId) 
+    : draftSession;
 
   const sendMessage = useCallback(async (text: string, attachments: FileMetadata[], settings: any) => {
-    if (!currentSessionId || !currentSession || !isDbReady) return;
+    if (!activeSession || !isDbReady) return;
+
+    const isNewSession = activeSession === draftSession;
+    const sessionId = activeSession.id;
+    const timestamp = Date.now();
 
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: Role.USER,
       content: text,
-      timestamp: Date.now(),
+      timestamp,
       attachments
     };
 
-    setSessions(prev => prev.map(s => s.id === currentSessionId ? { 
-      ...s, 
-      messages: [...s.messages, userMessage], 
-      title: s.messages.length === 0 ? text.slice(0, 30) : s.title 
-    } : s));
+    // Update state
+    if (isNewSession) {
+        // Promote draft to real session
+        const newSession = {
+            ...activeSession,
+            title: text.slice(0, 30),
+            messages: [userMessage],
+            lastUpdated: timestamp,
+            settings
+        };
+        setSessions(prev => [newSession, ...prev]);
+        setCurrentSessionId(sessionId);
+        setDraftSession(null);
+    } else {
+        // Update existing session
+        setSessions(prev => prev.map(s => s.id === sessionId ? { 
+            ...s, 
+            messages: [...s.messages, userMessage], 
+            title: s.messages.length === 0 ? text.slice(0, 30) : s.title,
+            lastUpdated: timestamp,
+            settings
+        } : s));
+    }
     
     setIsTyping(true);
 
@@ -112,22 +150,29 @@ const App: React.FC = () => {
       role: Role.ASSISTANT, 
       content: '', 
       thought: '', 
-      timestamp: Date.now() 
+      timestamp: timestamp + 1 
     };
-    setSessions(prev => prev.map(s => s.id === currentSessionId ? { 
+
+    // Add assistant placeholder (works for both new and existing because we just updated 'sessions' above)
+    setSessions(prev => prev.map(s => s.id === sessionId ? { 
       ...s, 
       messages: [...s.messages, assistantMessage] 
     } : s));
 
     try {
-      const activeKB = knowledgeBases.find(kb => kb.id === currentSession.activeKBId);
+      // Construct the full session object for the service call
+      // (State updates above might not be reflected in 'activeSession' closure yet)
+      const currentMessages = isNewSession ? [userMessage] : [...activeSession.messages, userMessage];
+      const sessionForService = { ...activeSession, messages: currentMessages, settings };
+      
+      const activeKB = knowledgeBases.find(kb => kb.id === sessionForService.activeKBId);
       const kbFiles = activeKB ? activeKB.files : [];
       
       await geminiService.generateStream(
-        { ...currentSession, messages: [...currentSession.messages, userMessage], settings },
+        sessionForService,
         kbFiles,
         (text, thought, sources) => {
-          setSessions(prev => prev.map(s => s.id === currentSessionId ? {
+          setSessions(prev => prev.map(s => s.id === sessionId ? {
             ...s,
             messages: s.messages.map(m => m.id === assistantId ? {
               ...m,
@@ -141,7 +186,7 @@ const App: React.FC = () => {
           } : s));
         },
         (tool, args) => {
-          setSessions(prev => prev.map(s => s.id === currentSessionId ? {
+          setSessions(prev => prev.map(s => s.id === sessionId ? {
             ...s,
             messages: s.messages.map(m => m.id === assistantId ? {
               ...m, 
@@ -151,7 +196,7 @@ const App: React.FC = () => {
         }
       );
     } catch (e: any) {
-      setSessions(prev => prev.map(s => s.id === currentSessionId ? {
+      setSessions(prev => prev.map(s => s.id === sessionId ? {
         ...s,
         messages: s.messages.map(m => m.id === assistantId ? {
           ...m,
@@ -163,7 +208,7 @@ const App: React.FC = () => {
     } finally { 
       setIsTyping(false); 
     }
-  }, [currentSessionId, knowledgeBases, currentSession, isDbReady]);
+  }, [activeSession, draftSession, isDbReady, knowledgeBases]);
 
   const handleAddKB = async (name: string) => {
     const newKB: KnowledgeBase = {
@@ -211,7 +256,8 @@ const App: React.FC = () => {
         if (newSessions.length > 0) {
           setCurrentSessionId(newSessions[0].id);
         } else {
-          setCurrentSessionId(null);
+          // If all sessions deleted, go to draft mode
+          createDraftSession();
         }
       }
       return newSessions;
@@ -220,6 +266,7 @@ const App: React.FC = () => {
 
   const handleSidebarSelect = (id: string) => {
     setCurrentSessionId(id);
+    setDraftSession(null); // Abandon any active draft
     setCurrentView('chat');
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
@@ -284,16 +331,20 @@ const App: React.FC = () => {
              onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
            />
         ) : (
-          currentSession ? (
+          activeSession ? (
             <ChatInterface 
-              session={currentSession}
+              session={activeSession}
               knowledgeBases={knowledgeBases}
               onSendMessage={sendMessage}
               onUpdateSettings={(settings) => {
-                setSessions(prev => prev.map(s => s.id === currentSessionId ? { 
-                  ...s, 
-                  settings: { ...s.settings, ...settings } 
-                } : s));
+                if (activeSession === draftSession) {
+                    setDraftSession({ ...draftSession!, settings: { ...draftSession!.settings, ...settings } });
+                } else {
+                    setSessions(prev => prev.map(s => s.id === currentSessionId ? { 
+                      ...s, 
+                      settings: { ...s.settings, ...settings } 
+                    } : s));
+                }
               }}
               isTyping={isTyping}
               isSidebarOpen={isSidebarOpen}

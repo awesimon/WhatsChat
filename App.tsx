@@ -10,14 +10,17 @@ import CitationSidebar from './components/CitationSidebar';
 
 const geminiService = new GeminiService();
 
+type ViewState = 'chat' | 'kb';
+
 const App: React.FC = () => {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState<ViewState>('chat');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isKBOpen, setIsKBOpen] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isDbReady, setIsDbReady] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
   
   // Citation Preview State
   const [previewCitation, setPreviewCitation] = useState<{ title: string; uri: string } | null>(null);
@@ -47,17 +50,23 @@ const App: React.FC = () => {
           setCurrentSessionId(newSession.id);
         }
         setIsDbReady(true);
-      } catch (e) {
+      } catch (e: any) {
         console.error("Initialization error:", e);
+        setInitError(e.message || "Failed to initialize application resources. Please check your connection.");
       }
     };
     init();
   }, []);
 
+  // Debounce saving sessions to disk to improve performance
   useEffect(() => {
-    if (isDbReady && sessions.length > 0) {
+    if (!isDbReady || sessions.length === 0) return;
+
+    const timeoutId = setTimeout(() => {
       storageService.saveSessions(sessions);
-    }
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
   }, [sessions, isDbReady]);
 
   const createNewSession = async () => {
@@ -68,9 +77,11 @@ const App: React.FC = () => {
       lastUpdated: Date.now(),
       settings: { useReasoning: true, useWebSearch: true, useMaps: false }
     };
+    // Immediate save for new session is fine
     await storageService.saveSessions([newSession]);
     setSessions(prev => [newSession, ...prev]);
     setCurrentSessionId(newSession.id);
+    setCurrentView('chat');
     if (!isSidebarOpen && window.innerWidth < 768) setIsSidebarOpen(true);
   };
 
@@ -144,7 +155,9 @@ const App: React.FC = () => {
         ...s,
         messages: s.messages.map(m => m.id === assistantId ? {
           ...m,
-          content: "I'm having a little trouble connecting right now. Can we try that again?"
+          content: e.message?.includes("Failed to fetch") 
+            ? "I'm having trouble connecting to the internet. Please check your network connection."
+            : "I'm having a little trouble right now. Can we try that again?"
         } : m)
       } : s));
     } finally { 
@@ -181,65 +194,120 @@ const App: React.FC = () => {
     setSessions(prev => prev.map(s => s.activeKBId === id ? { ...s, activeKBId: undefined } : s));
   };
 
+  const handleDeleteFile = async (kbId: string, fileId: string) => {
+    await storageService.deleteFile(fileId);
+    setKnowledgeBases(prev => prev.map(kb => 
+      kb.id === kbId 
+        ? { ...kb, files: kb.files.filter(f => f.id !== fileId) } 
+        : kb
+    ));
+  };
+
   const handleDeleteSession = async (id: string) => {
     await storageService.deleteSession(id);
-    setSessions(prev => prev.filter(s => s.id !== id));
-    if (currentSessionId === id) {
-      setCurrentSessionId(sessions.find(s => s.id !== id)?.id || null);
-    }
+    setSessions(prev => {
+      const newSessions = prev.filter(s => s.id !== id);
+      if (currentSessionId === id) {
+        if (newSessions.length > 0) {
+          setCurrentSessionId(newSessions[0].id);
+        } else {
+          setCurrentSessionId(null);
+        }
+      }
+      return newSessions;
+    });
   };
+
+  const handleSidebarSelect = (id: string) => {
+    setCurrentSessionId(id);
+    setCurrentView('chat');
+    if (window.innerWidth < 768) setIsSidebarOpen(false);
+  };
+
+  if (initError) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#f8fafc] p-6 text-center">
+        <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border border-rose-100">
+           <div className="w-20 h-20 bg-rose-50 rounded-2xl flex items-center justify-center mb-6 mx-auto text-rose-500 shadow-sm">
+              <i className="fas fa-wifi text-3xl"></i>
+           </div>
+           <h2 className="text-2xl font-bold text-slate-800 mb-3">Connection Issue</h2>
+           <p className="text-slate-500 mb-8 leading-relaxed">
+             We couldn't load the necessary resources. This usually happens when you are offline or a network restriction is blocking our library.
+             <br/><br/>
+             <span className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-400 font-mono">{initError}</span>
+           </p>
+           <button onClick={() => window.location.reload()} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 hover:shadow-lg transition-all transform hover:-translate-y-1">
+              Retry Connection
+           </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!isDbReady) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#fcfcfc]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 bg-teal-500 rounded-2xl animate-bounce flex items-center justify-center shadow-lg">
-             <i className="fas fa-sparkles text-white text-2xl"></i>
+      <div className="flex h-screen items-center justify-center bg-[#f8fafc]">
+        <div className="flex flex-col items-center gap-6">
+          <div className="w-20 h-20 bg-indigo-600 rounded-3xl animate-bounce flex items-center justify-center shadow-xl shadow-indigo-200">
+             <i className="fas fa-bolt text-white text-4xl"></i>
           </div>
-          <p className="text-sm font-medium text-slate-500">Waking up Lumi...</p>
+          <p className="text-lg font-bold text-slate-500 tracking-tight">Waking up Lumi...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-[#fcfcfc] text-slate-800 overflow-hidden font-sans">
+    <div className="flex h-screen bg-[#f8fafc] text-slate-800 overflow-hidden font-sans">
       <Sidebar 
         sessions={sessions} 
         currentId={currentSessionId} 
-        onSelect={setCurrentSessionId}
+        activeView={currentView}
+        onSelect={handleSidebarSelect}
         onNew={createNewSession} 
         onDelete={handleDeleteSession}
-        onOpenKB={() => setIsKBOpen(true)} 
+        onOpenKB={() => { setCurrentView('kb'); if (window.innerWidth < 768) setIsSidebarOpen(false); }}
         isOpen={isSidebarOpen} 
         toggle={() => setIsSidebarOpen(!isSidebarOpen)}
       />
       
       <main className="flex-1 relative flex flex-col overflow-hidden bg-white z-10 my-0 md:my-2 md:mr-2 rounded-none md:rounded-[30px] border-0 md:border border-slate-100 shadow-xl">
-        {currentSession ? (
-          <ChatInterface 
-            session={currentSession}
-            knowledgeBases={knowledgeBases}
-            onSendMessage={sendMessage}
-            onUpdateSettings={(settings) => {
-              setSessions(prev => prev.map(s => s.id === currentSessionId ? { 
-                ...s, 
-                ...settings, 
-                settings: { ...s.settings, ...settings } 
-              } : s));
-            }}
-            isTyping={isTyping}
-            isSidebarOpen={isSidebarOpen}
-            onToggleSidebar={() => setIsSidebarOpen(true)}
-            onPreviewCitation={setPreviewCitation}
-          />
+        {currentView === 'kb' ? (
+           <KBManager 
+             knowledgeBases={knowledgeBases}
+             onAddKB={handleAddKB}
+             onDeleteKB={handleDeleteKB}
+             onUploadToFile={handleUploadToFile}
+             onDeleteFile={handleDeleteFile}
+             isSidebarOpen={isSidebarOpen}
+             onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+           />
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
-            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-slate-100">
-               <i className="fas fa-comment-dots text-3xl text-slate-300"></i>
+          currentSession ? (
+            <ChatInterface 
+              session={currentSession}
+              knowledgeBases={knowledgeBases}
+              onSendMessage={sendMessage}
+              onUpdateSettings={(settings) => {
+                setSessions(prev => prev.map(s => s.id === currentSessionId ? { 
+                  ...s, 
+                  settings: { ...s.settings, ...settings } 
+                } : s));
+              }}
+              isTyping={isTyping}
+              isSidebarOpen={isSidebarOpen}
+              onToggleSidebar={() => setIsSidebarOpen(true)}
+              onPreviewCitation={setPreviewCitation}
+            />
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+              <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6 border border-slate-100">
+                 <i className="fas fa-comment-dots text-4xl text-slate-300"></i>
+              </div>
+              <p className="font-bold text-lg">Select a conversation to start</p>
             </div>
-            <p className="font-medium">Select a conversation to start</p>
-          </div>
+          )
         )}
       </main>
       
@@ -248,16 +316,6 @@ const App: React.FC = () => {
           url={previewCitation.uri}
           title={previewCitation.title}
           onClose={() => setPreviewCitation(null)}
-        />
-      )}
-
-      {isKBOpen && (
-        <KBManager 
-          knowledgeBases={knowledgeBases}
-          onAddKB={handleAddKB}
-          onDeleteKB={handleDeleteKB}
-          onUploadToFile={handleUploadToFile}
-          onClose={() => setIsKBOpen(false)}
         />
       )}
     </div>

@@ -7,21 +7,62 @@ class SQLiteStorage {
   private db: any = null;
   private SQL: any = null;
 
+  private async ensureSqlJsLoaded(): Promise<void> {
+    if ((window as any).initSqlJs) return;
+
+    console.log("SQL.js not found on window, loading dynamically...");
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/sql-wasm.js";
+      // Integrity check removed to prevent 'Failed to fetch' errors on hash mismatch
+      script.crossOrigin = "anonymous";
+      script.referrerPolicy = "no-referrer";
+      script.onload = () => {
+        console.log("SQL.js script loaded");
+        resolve();
+      };
+      script.onerror = (e) => {
+        console.error("Failed to load SQL.js script", e);
+        reject(new Error("Failed to load SQL.js script (Network error)"));
+      };
+      document.head.appendChild(script);
+    });
+  }
+
   async init() {
     if (this.db) return;
 
-    // Load SQL.js WASM
-    this.SQL = await (window as any).initSqlJs({
-      locateFile: (file: string) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/${file}`
-    });
+    try {
+        await this.ensureSqlJsLoaded();
+        
+        // Wait a tick just in case
+        if (!(window as any).initSqlJs) {
+             throw new Error("initSqlJs is still not defined after script load");
+        }
 
-    const savedDb = localStorage.getItem(SQLITE_DB_KEY);
-    if (savedDb) {
-      const u8 = new Uint8Array(atob(savedDb).split("").map(c => c.charCodeAt(0)));
-      this.db = new this.SQL.Database(u8);
-    } else {
-      this.db = new this.SQL.Database();
-      this.createTables();
+        // Load SQL.js WASM
+        this.SQL = await (window as any).initSqlJs({
+          locateFile: (file: string) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/${file}`
+        });
+
+        const savedDb = localStorage.getItem(SQLITE_DB_KEY);
+        if (savedDb) {
+        const u8 = new Uint8Array(atob(savedDb).split("").map(c => c.charCodeAt(0)));
+        this.db = new this.SQL.Database(u8);
+        
+        // Migration: Add indexingMethod column if it doesn't exist
+        try {
+            this.db.run("ALTER TABLE kb_files ADD COLUMN indexingMethod TEXT");
+        } catch (e) {
+            // Column likely exists
+        }
+        } else {
+        this.db = new this.SQL.Database();
+        this.createTables();
+        }
+    } catch (e) {
+        console.error("Failed to initialize SQLite storage:", e);
+        throw e;
     }
   }
 
@@ -63,6 +104,7 @@ class SQLiteStorage {
         size INTEGER,
         data TEXT,
         content TEXT,
+        indexingMethod TEXT,
         FOREIGN KEY(kbId) REFERENCES knowledge_bases(id) ON DELETE CASCADE
       );
     `);
@@ -70,14 +112,30 @@ class SQLiteStorage {
   }
 
   private saveToDisk() {
-    const data = this.db.export();
-    const base64 = btoa(String.fromCharCode.apply(null, Array.from(data)));
-    localStorage.setItem(SQLITE_DB_KEY, base64);
+    try {
+        const data = this.db.export();
+        // Chunk processing to prevent "Maximum call stack size exceeded"
+        const CHUNK_SIZE = 0x8000; // 32768
+        const arr = Array.from(data as Uint8Array);
+        let binary = '';
+        
+        for (let i = 0; i < arr.length; i += CHUNK_SIZE) {
+            const chunk = arr.slice(i, i + CHUNK_SIZE);
+            binary += String.fromCharCode.apply(null, chunk as number[]);
+        }
+        
+        const base64 = btoa(binary);
+        localStorage.setItem(SQLITE_DB_KEY, base64);
+    } catch (e) {
+        console.error("Failed to save DB to disk", e);
+    }
   }
 
   // Session Methods
   async saveSessions(sessions: ChatSession[]) {
     // For simplicity in this implementation, we overwrite or upsert
+    // Wrap in transaction for performance
+    this.db.run("BEGIN TRANSACTION");
     for (const session of sessions) {
       this.db.run(`INSERT OR REPLACE INTO sessions (id, title, lastUpdated, activeKBId, settings) VALUES (?, ?, ?, ?, ?)`, [
         session.id,
@@ -92,6 +150,7 @@ class SQLiteStorage {
         this.saveMessage(session.id, msg);
       }
     }
+    this.db.run("COMMIT");
     this.saveToDisk();
   }
 
@@ -124,7 +183,11 @@ class SQLiteStorage {
       });
 
       // Parse JSON
-      session.settings = JSON.parse(session.settings);
+      try {
+        session.settings = JSON.parse(session.settings);
+      } catch {
+        session.settings = { useReasoning: true, useWebSearch: true, useMaps: false };
+      }
       
       // Load Messages for this session
       session.messages = this.getMessages(session.id);
@@ -146,9 +209,9 @@ class SQLiteStorage {
       columns.forEach((col: string, i: number) => {
         msg[col] = row[i];
       });
-      msg.attachments = JSON.parse(msg.attachments);
-      msg.toolInvocations = JSON.parse(msg.toolInvocations);
-      msg.groundingSources = JSON.parse(msg.groundingSources);
+      try { msg.attachments = JSON.parse(msg.attachments); } catch { msg.attachments = []; }
+      try { msg.toolInvocations = JSON.parse(msg.toolInvocations); } catch { msg.toolInvocations = []; }
+      try { msg.groundingSources = JSON.parse(msg.groundingSources); } catch { msg.groundingSources = []; }
       return msg as ChatMessage;
     });
   }
@@ -191,6 +254,20 @@ class SQLiteStorage {
       columns.forEach((col: string, i: number) => {
         file[col] = row[i];
       });
+      
+      // Parse indexingMethod from string/JSON to string[]
+      if (file.indexingMethod) {
+          try {
+              const parsed = JSON.parse(file.indexingMethod);
+              file.indexingMethod = Array.isArray(parsed) ? parsed : [parsed];
+          } catch (e) {
+              // Handle legacy string data (e.g., "vector") that isn't valid JSON
+              file.indexingMethod = [file.indexingMethod];
+          }
+      } else {
+          file.indexingMethod = ['vector']; // Default
+      }
+
       return file as FileMetadata;
     });
   }
@@ -202,23 +279,31 @@ class SQLiteStorage {
       kb.description,
       kb.createdAt
     ]);
+    this.db.run("BEGIN TRANSACTION");
     for (const file of kb.files) {
-      this.db.run(`INSERT OR REPLACE INTO kb_files (id, kbId, name, type, size, data, content) VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+      this.db.run(`INSERT OR REPLACE INTO kb_files (id, kbId, name, type, size, data, content, indexingMethod) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [
         file.id,
         kb.id,
         file.name,
         file.type,
         file.size,
         file.data,
-        file.content || null
+        file.content || null,
+        JSON.stringify(file.indexingMethod || ['vector'])
       ]);
     }
+    this.db.run("COMMIT");
     this.saveToDisk();
   }
 
   async deleteKnowledgeBase(id: string) {
     this.db.run("DELETE FROM knowledge_bases WHERE id = ?", [id]);
     this.db.run("DELETE FROM kb_files WHERE kbId = ?", [id]);
+    this.saveToDisk();
+  }
+  
+  async deleteFile(id: string) {
+    this.db.run("DELETE FROM kb_files WHERE id = ?", [id]);
     this.saveToDisk();
   }
 

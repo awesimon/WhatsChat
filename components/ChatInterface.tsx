@@ -23,7 +23,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onSendMessage, 
   onUpdateSettings, 
   isTyping,
-  isSidebarOpen,
+  isSidebarOpen, 
   onToggleSidebar,
   onPreviewCitation
 }) => {
@@ -31,10 +31,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [attachments, setAttachments] = useState<FileMetadata[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
+  const hasMessages = session.messages.length > 0;
+  
+  // Auto-scroll effect
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [session.messages, isTyping]);
+    if (hasMessages) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [session.messages.length, isTyping, hasMessages]);
 
   const handleSend = () => {
     if (inputText.trim() || attachments.length > 0) {
@@ -44,42 +48,71 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
+  const handleSuggestion = (text: string) => {
+    onSendMessage(text, [], session.settings);
+  };
+
   const toggleSetting = (key: string) => {
     onUpdateSettings({ ...session.settings, [key]: !((session.settings as any)[key]) });
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      Promise.all(files.map(file => new Promise<FileMetadata>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const base64 = (ev.target?.result as string).split(',')[1];
+          resolve({
+            id: crypto.randomUUID(),
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            data: base64
+          });
+        };
+        reader.readAsDataURL(file);
+      }))).then(newAttachments => {
+        setAttachments(prev => [...prev, ...newAttachments]);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      });
+    }
   };
 
   const currentKB = knowledgeBases.find(kb => kb.id === session.activeKBId);
 
   return (
-    <div className="flex-1 flex flex-col h-full relative bg-white/40 backdrop-blur-sm">
-      {/* Friendly Header */}
-      <div className="px-8 py-5 flex items-center justify-between border-b border-slate-50 bg-white/80 backdrop-blur sticky top-0 z-20">
+    <div className="flex-1 flex flex-col h-full relative bg-white/40 backdrop-blur-sm overflow-hidden font-nunito">
+      {/* Friendly Header - Fade out when empty to focus on center content */}
+      <div className={`px-8 py-5 flex items-center justify-between absolute top-0 left-0 right-0 z-20 transition-all duration-500 ${hasMessages ? 'opacity-100 translate-y-0 bg-white/80 backdrop-blur border-b border-slate-50' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
         <div className="flex items-center gap-4">
           {!isSidebarOpen && (
             <button 
               onClick={onToggleSidebar}
               className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 transition-colors"
             >
-              <i className="fas fa-bars"></i>
+              <i className="fas fa-bars text-lg"></i>
             </button>
           )}
           
           <div className="flex flex-col">
             <h2 className="font-bold text-slate-800 text-lg flex items-center gap-2">
               {session.title}
-              {currentKB && <span className="text-[10px] bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full font-bold border border-teal-100">KB: {currentKB.name}</span>}
+              {currentKB && <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full font-bold border border-indigo-100">KB: {currentKB.name}</span>}
             </h2>
-            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-              <span className={`w-2 h-2 rounded-full ${isTyping ? 'bg-teal-500 animate-pulse' : 'bg-teal-300'}`}></span>
-              {isTyping ? 'Lumi is thinking...' : 'Lumi is ready'}
-            </div>
+            {isTyping && (
+              <div className="flex items-center gap-2 text-sm text-indigo-600 font-medium">
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                Lumi is thinking...
+              </div>
+            )}
           </div>
         </div>
 
         <select 
           value={session.activeKBId || ''}
           onChange={(e) => onUpdateSettings({ ...session.settings, activeKBId: e.target.value })}
-          className="text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-xl px-4 py-2 hover:border-teal-400 cursor-pointer focus:ring-0 shadow-sm transition-colors"
+          className="text-sm font-semibold text-slate-600 bg-slate-50 border-transparent rounded-lg px-3 py-2 hover:bg-slate-100 cursor-pointer focus:ring-0 transition-colors"
         >
           <option value="">✨ General Chat</option>
           {knowledgeBases.map(kb => (
@@ -88,94 +121,257 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </select>
       </div>
 
-      {/* Chat Stream */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-24 py-8 space-y-10 custom-scrollbar">
-        {session.messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-center animate-float pb-20">
-            <div className="w-24 h-24 bg-gradient-to-tr from-teal-500 to-emerald-400 rounded-[2rem] flex items-center justify-center shadow-2xl shadow-teal-100 mb-6">
-               <i className="fas fa-hand-sparkles text-white text-4xl"></i>
+      {/* Main Content Area */}
+      <div className="flex-1 relative w-full h-full">
+        {/* Welcome Screen (Centered Top) - Visible when no messages */}
+        <div className={`absolute left-0 right-0 top-[15%] md:top-[20%] flex flex-col items-center justify-start transition-all duration-700 ease-in-out pointer-events-none z-10 ${hasMessages ? 'opacity-0 -translate-y-20 scale-95' : 'opacity-100 translate-y-0 scale-100'}`}>
+            <div className="w-full max-w-4xl px-6">
+               <div className="flex items-center gap-3 mb-3 animate-in fade-in slide-in-from-bottom-2 duration-700">
+                  {/* Gradient Star Icon */}
+                  <div className="relative w-8 h-8">
+                    <i className="fas fa-star text-2xl absolute inset-0 text-transparent bg-clip-text bg-gradient-to-tr from-indigo-400 via-purple-400 to-pink-400 animate-pulse"></i>
+                  </div>
+                  <span className="text-2xl font-medium text-slate-600">Hello there</span>
+               </div>
+               <h1 className="text-6xl md:text-7xl font-medium text-slate-800 tracking-tight leading-tight animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-100">
+                 How can I help you today?
+               </h1>
             </div>
-            <h1 className="text-3xl font-bold text-slate-800 mb-3 font-outfit">Hello, I'm Lumi!</h1>
-            <p className="text-slate-500 max-w-md text-lg">
-              I can help you analyze documents, plan your day, or just chat. How can I assist you?
-            </p>
-          </div>
-        )}
-        
-        {session.messages.map((msg, idx) => (
-          <MessageItem 
-            key={msg.id} 
-            message={msg} 
-            isLast={idx === session.messages.length - 1} 
-            isTyping={isTyping} 
-            onPreviewCitation={onPreviewCitation}
-          />
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
+        </div>
 
-      {/* Floating Input Bar */}
-      <div className="p-6 max-w-4xl mx-auto w-full relative z-30">
-        <div className="bg-white rounded-[2rem] p-3 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.1)] border border-slate-200 transition-all focus-within:shadow-[0_20px_40px_-10px_rgba(13,148,136,0.15)] focus-within:border-teal-300">
-          <div className="px-3 pt-1">
-            <textarea 
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-              placeholder="Ask me anything..."
-              className="w-full bg-transparent border-none text-slate-700 placeholder-slate-400 focus:ring-0 outline-none min-h-[44px] max-h-32 resize-none text-lg"
-              style={{ fontFamily: 'Nunito, sans-serif' }}
-            />
-          </div>
-          
-          <div className="flex items-center justify-between px-2 pt-2">
-            <div className="flex items-center gap-1.5">
-              <ToolToggle active={session.settings.useReasoning} onClick={() => toggleSetting('useReasoning')} icon="fa-lightbulb" label="Think" />
-              <ToolToggle active={session.settings.useWebSearch} onClick={() => toggleSetting('useWebSearch')} icon="fa-globe" label="Web" />
-              <ToolToggle active={session.settings.useMaps} onClick={() => toggleSetting('useMaps')} icon="fa-map-marker-alt" label="Maps" />
+        {/* Chat Stream - Visible when messages exist */}
+        <div className={`absolute inset-0 overflow-y-auto custom-scrollbar transition-opacity duration-1000 ${hasMessages ? 'opacity-100 z-0' : 'opacity-0 -z-10'}`}>
+            <div className="px-4 md:px-12 py-24 pb-48 space-y-8 min-h-full flex flex-col justify-end md:justify-start">
+            {session.messages.map((msg, idx) => (
+                <MessageItem 
+                    key={msg.id} 
+                    message={msg} 
+                    isLast={idx === session.messages.length - 1} 
+                    isTyping={isTyping} 
+                    onPreviewCitation={onPreviewCitation}
+                />
+            ))}
+            <div ref={messagesEndRef} />
             </div>
-            
-            <div className="flex items-center gap-3">
-               <button 
-                 onClick={() => fileInputRef.current?.click()} 
-                 className="w-10 h-10 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 hover:text-teal-600 transition-colors"
-               >
-                 <i className="fas fa-paperclip"></i>
-               </button>
-               <button 
-                onClick={handleSend}
-                disabled={!inputText.trim() && attachments.length === 0}
-                className={`h-10 px-6 rounded-full font-bold transition-all flex items-center gap-2 ${
-                  (!inputText.trim() && attachments.length === 0) 
-                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                  : 'bg-teal-600 text-white shadow-lg shadow-teal-200 hover:bg-teal-700 hover:shadow-xl hover:-translate-y-0.5'
-                }`}
-              >
-                <span>Send</span>
-                <i className="fas fa-paper-plane text-sm"></i>
-              </button>
-            </div>
-          </div>
         </div>
-        <div className="text-center mt-3 text-xs text-slate-400 font-medium">
-          Lumi can make mistakes. Please verify important information.
+
+        {/* Floating Input Bar (Animates from Center to Bottom) */}
+        <div className={`absolute left-0 right-0 z-30 transition-all duration-[800ms] cubic-bezier(0.22, 1, 0.36, 1) flex flex-col items-center px-4 md:px-6 ${
+            hasMessages 
+                ? 'bottom-8 translate-y-0' 
+                : 'bottom-1/2 translate-y-[60%]' 
+        }`}>
+            <div className="w-full max-w-4xl relative">
+                {/* Particle Effects Container */}
+                <ParticleBurst trigger={hasMessages} />
+
+                {/* Input Pill */}
+                <div className={`bg-white rounded-[2rem] transition-all duration-500 relative z-20 flex flex-col ${
+                    hasMessages 
+                    ? 'shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] border border-slate-200' 
+                    : 'shadow-[0_4px_20px_-2px_rgba(0,0,0,0.08)] border border-slate-100 hover:shadow-[0_8px_30px_-4px_rgba(0,0,0,0.12)]'
+                }`}>
+                  
+                  {/* Pending Attachments Preview */}
+                  {attachments.length > 0 && (
+                    <div className="px-8 pt-4 flex gap-3 overflow-x-auto custom-scrollbar">
+                      {attachments.map(att => (
+                        <div key={att.id} className="relative group shrink-0 animate-in zoom-in-50 duration-200">
+                          {att.type.startsWith('image/') ? (
+                            <div className="w-16 h-16 rounded-xl border border-slate-200 bg-slate-50 overflow-hidden relative">
+                               <img src={`data:${att.type};base64,${att.data}`} className="w-full h-full object-cover" alt="preview" />
+                            </div>
+                          ) : (
+                            <div className="w-16 h-16 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400">
+                              <i className="fas fa-file text-xl"></i>
+                            </div>
+                          )}
+                          <button 
+                            onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
+                            className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center text-xs shadow-sm hover:scale-110 transition-transform"
+                          >
+                            <i className="fas fa-times"></i>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Text Input */}
+                  <div className={`px-8 pb-3 ${attachments.length > 0 ? 'pt-3' : 'pt-5'}`}>
+                      <textarea 
+                      value={inputText}
+                      onChange={(e) => setInputText(e.target.value)}
+                      onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                      placeholder="Ask Lumi..."
+                      className="w-full bg-transparent border-none text-slate-700 placeholder-slate-400 focus:ring-0 outline-none min-h-[32px] max-h-40 resize-none text-xl font-medium"
+                      style={{ fontFamily: 'Nunito, sans-serif' }}
+                      />
+                  </div>
+                  
+                  {/* Toolbar Row */}
+                  <div className="flex items-center justify-between px-6 pb-4">
+                      <div className="flex items-center gap-3">
+                        <button 
+                            onClick={() => fileInputRef.current?.click()} 
+                            className="w-10 h-10 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                            title="Add Attachment"
+                        >
+                            <i className="fas fa-plus text-lg"></i>
+                        </button>
+                        
+                        <div className="h-5 w-[1px] bg-slate-200 mx-1"></div>
+
+                        {/* Tools Group */}
+                        <div className="flex items-center gap-1">
+                          <ToolToggle active={session.settings.useWebSearch} onClick={() => toggleSetting('useWebSearch')} icon="fa-globe" label="Web" />
+                          <ToolToggle active={session.settings.useMaps} onClick={() => toggleSetting('useMaps')} icon="fa-map-marker-alt" label="Maps" />
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-3">
+                         {/* Model/Reasoning Selector */}
+                         <button 
+                           onClick={() => toggleSetting('useReasoning')}
+                           className={`flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold transition-all ${
+                             session.settings.useReasoning 
+                               ? 'bg-slate-800 text-white' 
+                               : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                           }`}
+                         >
+                           <span className="text-sm">Pro</span>
+                           <i className={`fas fa-chevron-down text-[10px] transition-transform ${session.settings.useReasoning ? 'rotate-180' : ''}`}></i>
+                         </button>
+                         
+                         {/* Send Button */}
+                         <button 
+                          onClick={handleSend}
+                          disabled={!inputText.trim() && attachments.length === 0}
+                          className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${
+                            (inputText.trim() || attachments.length > 0) 
+                            ? 'bg-indigo-600 text-white shadow-md hover:bg-indigo-700 hover:scale-105' 
+                            : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                          }`}
+                        >
+                          <i className="fas fa-paper-plane text-base translate-x-[-1px] translate-y-[1px]"></i>
+                        </button>
+                      </div>
+                  </div>
+                </div>
+
+                {/* Suggestions Chips - Below input, visible only when centered */}
+                <div className={`mt-8 flex flex-wrap justify-center gap-3 transition-all duration-500 ${hasMessages ? 'opacity-0 scale-95 pointer-events-none h-0 overflow-hidden' : 'opacity-100 scale-100'}`}>
+                   <SuggestionChip icon="fa-image" label="Create image" color="text-yellow-500" onClick={() => handleSuggestion("Generate an image of a futuristic city with flying cars")} />
+                   <SuggestionChip icon="fa-video" label="Create video" color="text-purple-500" onClick={() => handleSuggestion("Create a short video of a robot dancing")} />
+                   <SuggestionChip icon="fa-pen-nib" label="Write for me" color="text-blue-500" onClick={() => handleSuggestion("Write a short story about a time traveler")} />
+                   <SuggestionChip icon="fa-graduation-cap" label="Help me study" color="text-indigo-500" onClick={() => handleSuggestion("Explain quantum computing to a 5 year old")} />
+                   <SuggestionChip icon="fa-leaf" label="Energize day" color="text-green-500" onClick={() => handleSuggestion("Give me 5 productivity tips for today")} />
+                </div>
+                
+                {/* Footer Text */}
+                <div className={`text-center mt-6 text-xs text-slate-300 font-medium transition-opacity duration-500 ${hasMessages ? 'opacity-100' : 'opacity-0'}`}>
+                   Lumi can make mistakes. Please verify important information.
+                </div>
+            </div>
         </div>
       </div>
-      <input type="file" ref={fileInputRef} className="hidden" multiple />
+      <input type="file" ref={fileInputRef} className="hidden" multiple onChange={handleFileSelect} />
     </div>
   );
 };
+
+const ImageAttachment: React.FC<{ attachment: FileMetadata }> = ({ attachment }) => {
+  const [loaded, setLoaded] = useState(false);
+
+  return (
+    <div className="relative rounded-2xl overflow-hidden border border-slate-100 bg-slate-50 aspect-square max-h-72">
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-100 z-10">
+          <i className="fas fa-spinner fa-spin text-slate-400 text-2xl"></i>
+        </div>
+      )}
+      <img
+        src={`data:${attachment.type};base64,${attachment.data}`}
+        alt={attachment.name}
+        className={`w-full h-full object-cover transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        onLoad={() => setLoaded(true)}
+      />
+    </div>
+  );
+};
+
+const SuggestionChip: React.FC<{ icon: string; label: string; color: string; onClick: () => void }> = ({ icon, label, color, onClick }) => (
+  <button 
+    onClick={onClick}
+    className="flex items-center gap-3 px-6 py-3 bg-white rounded-full shadow-sm border border-slate-100 hover:border-slate-200 hover:shadow-md hover:-translate-y-0.5 transition-all group"
+  >
+    <i className={`fas ${icon} ${color} text-base group-hover:scale-110 transition-transform`}></i>
+    <span className="text-base font-semibold text-slate-600">{label}</span>
+  </button>
+);
+
+const ParticleBurst: React.FC<{ trigger: boolean }> = ({ trigger }) => {
+  const [active, setActive] = useState(false);
+  
+  useEffect(() => {
+    if (trigger) {
+      setActive(true);
+      const timer = setTimeout(() => setActive(false), 1000); // Cleanup after animation
+      return () => clearTimeout(timer);
+    } else {
+        setActive(false);
+    }
+  }, [trigger]);
+
+  if (!active) return null;
+
+  // Generate ~12 particles
+  const particles = Array.from({ length: 12 }).map((_, i) => {
+    const angle = (i / 12) * 360;
+    const distance = 100 + Math.random() * 50;
+    const tx = Math.cos(angle * Math.PI / 180) * distance;
+    const ty = Math.sin(angle * Math.PI / 180) * distance;
+    const delay = Math.random() * 0.2;
+    const color = i % 2 === 0 ? '#4f46e5' : '#8b5cf6'; // Indigo and Violet
+    
+    return (
+      <div 
+        key={i}
+        className="absolute top-1/2 left-1/2 w-3 h-3 rounded-full opacity-0 pointer-events-none"
+        style={{
+          backgroundColor: color,
+          animation: `particle-fly 0.8s ease-out forwards ${delay}s`,
+          '--tx': `${tx}px`,
+          '--ty': `${ty}px`
+        } as React.CSSProperties}
+      />
+    );
+  });
+
+  return (
+    <div className="absolute inset-0 overflow-visible pointer-events-none z-0">
+        <style>{`
+            @keyframes particle-fly {
+                0% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
+                100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0); opacity: 0; }
+            }
+        `}</style>
+        {particles}
+    </div>
+  );
+}
 
 const ToolToggle: React.FC<{ active: boolean; onClick: () => void; icon: string; label: string }> = ({ active, onClick, icon, label }) => (
   <button 
     onClick={onClick}
     className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
       active 
-        ? 'bg-teal-50 text-teal-700 border border-teal-100' 
-        : 'text-slate-500 hover:bg-slate-50 border border-transparent'
+        ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' 
+        : 'text-slate-400 hover:bg-slate-50 border border-transparent hover:text-slate-600'
     }`}
   >
-    <i className={`fas ${icon} ${active ? 'text-amber-500' : ''}`}></i> {label}
+    <i className={`fas ${icon} text-sm ${active ? 'text-indigo-600' : ''}`}></i>
+    <span className={`text-sm ${active ? 'block' : 'hidden md:block'}`}>{label}</span>
   </button>
 );
 
@@ -193,34 +389,34 @@ const MessageItem: React.FC<{
   }, [message.thought, isLast, isTyping]);
 
   return (
-    <div className={`flex gap-4 md:gap-6 ${isUser ? 'flex-row-reverse' : ''} group mb-6 animate-in fade-in duration-500`}>
+    <div className={`flex gap-5 md:gap-7 ${isUser ? 'flex-row-reverse' : ''} group mb-8 animate-in fade-in duration-500 slide-in-from-bottom-2`}>
       {/* Avatar */}
-      <div className={`w-9 h-9 shrink-0 flex items-center justify-center rounded-xl shadow-sm ${
+      <div className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-xl shadow-sm ${
         isUser 
           ? 'bg-white border border-slate-100 text-slate-400' 
-          : 'bg-teal-600 text-white shadow-teal-200'
+          : 'bg-indigo-600 text-white shadow-indigo-200'
       }`}>
-        {isUser ? <i className="fas fa-user"></i> : <i className="fas fa-sparkles"></i>}
+        {isUser ? <i className="fas fa-user text-base"></i> : <i className="fas fa-bolt text-base"></i>}
       </div>
       
       <div className={`flex-1 min-w-0 flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
         {/* Thought Bubble for Reasoning */}
         {message.thought && !isUser && (
-          <div className="w-full max-w-2xl mb-4">
+          <div className="w-full max-w-4xl mb-4">
             <button 
               onClick={() => setShowThought(!showThought)}
-              className="flex items-center gap-2 text-[10px] font-bold text-slate-400 hover:text-teal-600 transition-colors mb-2 px-1 uppercase tracking-wider"
+              className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors mb-2 px-1 uppercase tracking-wider"
             >
               <i className={`fas ${showThought ? 'fa-chevron-down' : 'fa-chevron-right'}`}></i> 
               Thinking Process
             </button>
             <div className={`expand-grid ${showThought ? 'expanded' : ''}`}>
               <div className="expand-content">
-                <div className="bg-white border border-slate-200 rounded-xl p-5 text-sm text-slate-600 leading-relaxed relative shadow-sm">
-                  <div className="flex items-center gap-2 mb-3 text-amber-500 font-bold text-xs uppercase tracking-wider">
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 text-base text-slate-600 leading-relaxed relative shadow-sm">
+                  <div className="flex items-center gap-2 mb-3 text-amber-500 font-bold text-sm uppercase tracking-wider">
                      <i className="fas fa-lightbulb"></i> Analysis
                   </div>
-                  <div className="whitespace-pre-wrap font-mono text-xs opacity-90 text-slate-500">{message.thought}</div>
+                  <div className="whitespace-pre-wrap font-mono text-sm opacity-90 text-slate-500">{message.thought}</div>
                 </div>
               </div>
             </div>
@@ -229,37 +425,58 @@ const MessageItem: React.FC<{
 
         {/* Tool Invocations */}
         {message.toolInvocations && message.toolInvocations.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2">
+          <div className="flex flex-wrap gap-2 mb-3">
             {message.toolInvocations.map((ti, i) => (
-              <div key={i} className="bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></div>
+              <div key={i} className="bg-slate-50 border border-slate-100 px-4 py-2 rounded-lg text-sm font-medium text-slate-600 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></div>
                 Used: <span className="font-bold">{ti.name}</span>
               </div>
             ))}
           </div>
         )}
 
+        {/* Attachments Grid */}
+        {message.attachments && message.attachments.length > 0 && (
+          <div className={`grid grid-cols-2 gap-3 mb-4 max-w-lg ${isUser ? 'ml-auto' : 'mr-auto'}`}>
+            {message.attachments.map(att => (
+               att.type.startsWith('image/') ? (
+                 <ImageAttachment key={att.id} attachment={att} />
+               ) : (
+                 <div key={att.id} className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center gap-3">
+                   <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-slate-500 shadow-sm">
+                     <i className="fas fa-file text-lg"></i>
+                   </div>
+                   <div className="flex-1 min-w-0">
+                     <div className="text-sm font-bold text-slate-700 truncate">{att.name}</div>
+                     <div className="text-xs text-slate-400">{(att.size / 1024).toFixed(1)} KB</div>
+                   </div>
+                 </div>
+               )
+            ))}
+          </div>
+        )}
+
         {/* Main Content Bubble */}
-        <div className={`relative max-w-2xl ${isUser ? 'text-right' : 'text-left'}`}>
-          <div className={`inline-block px-6 py-4 rounded-2xl ${
+        <div className={`relative max-w-4xl ${isUser ? 'text-right' : 'text-left'}`}>
+          <div className={`inline-block px-7 py-5 rounded-3xl ${
             isUser 
-              ? 'bg-gradient-to-br from-teal-500 to-teal-600 text-white shadow-md shadow-teal-100 rounded-tr-none' 
+              ? 'bg-slate-100 text-slate-800 rounded-tr-none' 
               : 'bg-white text-slate-700 shadow-sm border border-slate-100 rounded-tl-none'
           }`}>
             {isUser ? (
-              <div className="text-base font-medium">{message.content}</div>
+              <div className="text-lg font-medium whitespace-pre-wrap">{message.content}</div>
             ) : (
-              <div className="prose prose-p:text-slate-700 prose-headings:text-slate-800 prose-strong:text-teal-700 max-w-none">
+              <div className="prose prose-p:text-slate-700 prose-headings:text-slate-800 prose-strong:text-indigo-700 max-w-none">
                 {message.content ? (
                   <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeHighlight]}>
                     {message.content}
                   </ReactMarkdown>
                 ) : (
                    isLast && isTyping && (
-                     <div className="flex gap-1.5 items-center h-6 px-2">
-                       <div className="w-2 h-2 bg-teal-400 rounded-full typing-dot"></div>
-                       <div className="w-2 h-2 bg-teal-400 rounded-full typing-dot"></div>
-                       <div className="w-2 h-2 bg-teal-400 rounded-full typing-dot"></div>
+                     <div className="flex gap-2 items-center h-8 px-2">
+                       <div className="w-2.5 h-2.5 bg-indigo-400 rounded-full typing-dot"></div>
+                       <div className="w-2.5 h-2.5 bg-indigo-400 rounded-full typing-dot"></div>
+                       <div className="w-2.5 h-2.5 bg-indigo-400 rounded-full typing-dot"></div>
                      </div>
                    )
                 )}
@@ -268,23 +485,23 @@ const MessageItem: React.FC<{
             
             {/* Citations at the end of the bubble */}
             {message.groundingSources && message.groundingSources.length > 0 && !isUser && (
-              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-2">
+              <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap gap-2">
                 {message.groundingSources.map((src, i) => (
                   <button 
                     key={i} 
                     onClick={() => onPreviewCitation?.(src)}
-                    className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full text-[10px] font-bold text-slate-500 hover:text-teal-700 hover:bg-teal-50 hover:border-teal-200 transition-all max-w-full"
+                    className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-full text-xs font-bold text-slate-500 hover:text-indigo-700 hover:bg-indigo-50 hover:border-indigo-200 transition-all max-w-full"
                   >
-                    <span className="w-4 h-4 rounded-full bg-white flex items-center justify-center shadow-sm shrink-0">
+                    <span className="w-5 h-5 rounded-full bg-white flex items-center justify-center shadow-sm shrink-0">
                       <img 
                         src={`https://www.google.com/s2/favicons?domain=${new URL(src.uri).hostname}`} 
                         alt="" 
-                        className="w-2.5 h-2.5 opacity-70"
+                        className="w-3.5 h-3.5 opacity-70"
                         onError={(e) => { (e.target as HTMLImageElement).src = 'about:blank'; (e.target as HTMLImageElement).className = 'hidden'; }} 
                       />
-                      <i className={`fas fa-link text-[8px] ${new URL(src.uri).hostname ? 'hidden' : 'block'}`}></i>
+                      <i className={`fas fa-link text-[10px] ${new URL(src.uri).hostname ? 'hidden' : 'block'}`}></i>
                     </span>
-                    <span className="truncate max-w-[150px]">{src.title}</span>
+                    <span className="truncate max-w-[180px]">{src.title}</span>
                   </button>
                 ))}
               </div>

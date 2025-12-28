@@ -5,6 +5,8 @@ export enum Role {
   SYSTEM = 'system'
 }
 
+export type IndexingMethod = 'pageindex' | 'vector' | 'fulltext';
+
 export interface FileMetadata {
   id: string;
   name: string;
@@ -12,6 +14,7 @@ export interface FileMetadata {
   size: number;
   data: string; // Base64
   content?: string; // Text
+  indexingMethod?: IndexingMethod[];
 }
 
 export interface KnowledgeBase {
